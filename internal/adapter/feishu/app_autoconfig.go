@@ -161,7 +161,10 @@ func (s *autoConfigService) Apply(ctx context.Context) (AutoConfigApplyResult, e
 	result.Status = refreshed.Status
 	result.Summary = refreshed.Summary
 	result.BlockingReason = refreshed.BlockingReason
-	result.Plan = refreshed
+	result.Plan = projectAppliedPlan(refreshed, result.Actions)
+	result.Status = result.Plan.Status
+	result.Summary = result.Plan.Summary
+	result.BlockingReason = result.Plan.BlockingReason
 	return result, nil
 }
 
@@ -181,16 +184,33 @@ func (s *autoConfigService) Publish(ctx context.Context, req AutoConfigPublishRe
 		return result, nil
 	}
 	if plan.Diff.ConfigPatchRequired || plan.Diff.AbilityPatchRequired {
-		blocked := plan
-		blocked.Status = AutoConfigStatusBlocked
-		blocked.Summary = "仍有未写入的自动配置变更，发布前需要先执行 apply。"
-		blocked.BlockingReason = autoConfigBlockingApplyRequired
-		result.Status = blocked.Status
-		result.Summary = blocked.Summary
-		result.BlockingReason = blocked.BlockingReason
-		result.Plan = blocked
-		result.Actions = append(result.Actions, AutoConfigAction{Name: "publish", Outcome: "blocked", Details: "apply is required before publish"})
-		return result, nil
+		applied, err := s.Apply(ctx)
+		if err != nil {
+			return AutoConfigPublishResult{}, err
+		}
+		result.Actions = append(result.Actions, applied.Actions...)
+		result.Status = applied.Status
+		result.Summary = applied.Summary
+		result.BlockingReason = applied.BlockingReason
+		result.Plan = applied.Plan
+		plan = applied.Plan
+		for _, action := range applied.Actions {
+			if action.Outcome == "blocked" || action.Outcome == "unsupported" {
+				return result, nil
+			}
+		}
+		if plan.Diff.ConfigPatchRequired || plan.Diff.AbilityPatchRequired {
+			blocked := plan
+			blocked.Status = AutoConfigStatusBlocked
+			blocked.Summary = "自动配置写入后仍有未完成变更，当前不能提交发布。"
+			blocked.BlockingReason = autoConfigBlockingApplyRequired
+			result.Status = blocked.Status
+			result.Summary = blocked.Summary
+			result.BlockingReason = blocked.BlockingReason
+			result.Plan = blocked
+			result.Actions = append(result.Actions, AutoConfigAction{Name: "publish", Outcome: "blocked", Details: "apply did not converge"})
+			return result, nil
+		}
 	}
 	if !plan.Publish.NeedsPublish {
 		result.Actions = append(result.Actions, AutoConfigAction{Name: "publish", Outcome: "skipped", Details: "no publish is required"})
@@ -213,11 +233,13 @@ func (s *autoConfigService) Publish(ctx context.Context, req AutoConfigPublishRe
 		if updatedPlan.Status == AutoConfigStatusUnsupported {
 			outcome = "unsupported"
 		}
+		actions := append([]AutoConfigAction(nil), result.Actions...)
+		actions = append(actions, AutoConfigAction{Name: "publish", Outcome: outcome, Details: err.Error()})
 		return AutoConfigPublishResult{
 			Status:         updatedPlan.Status,
 			Summary:        updatedPlan.Summary,
 			BlockingReason: updatedPlan.BlockingReason,
-			Actions:        []AutoConfigAction{{Name: "publish", Outcome: outcome, Details: err.Error()}},
+			Actions:        actions,
 			Plan:           updatedPlan,
 		}, nil
 	}
@@ -225,13 +247,16 @@ func (s *autoConfigService) Publish(ctx context.Context, req AutoConfigPublishRe
 	if err != nil {
 		return AutoConfigPublishResult{}, err
 	}
+	refreshed = projectPublishedPlan(refreshed, versionID, version)
+	actions := append([]AutoConfigAction(nil), result.Actions...)
+	actions = append(actions, AutoConfigAction{Name: "publish", Outcome: "submitted"})
 	return AutoConfigPublishResult{
 		Status:         refreshed.Status,
 		Summary:        refreshed.Summary,
 		BlockingReason: refreshed.BlockingReason,
 		VersionID:      versionID,
 		Version:        version,
-		Actions:        []AutoConfigAction{{Name: "publish", Outcome: "submitted"}},
+		Actions:        actions,
 		Plan:           refreshed,
 	}, nil
 }
@@ -283,6 +308,35 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 	targetScopeRefs := scopeRefsFromRequirements(targetScopes)
 	targetEventKeys := eventKeys(s.manifest.Events)
 	targetCallbackKeys := callbackKeys(s.manifest.Callbacks)
+	eventSubscriptionType := strings.TrimSpace(stringValue(subscribedEventField(snapshot.app, "type")))
+	eventRequestURL := strings.TrimSpace(stringValue(subscribedEventField(snapshot.app, "url")))
+	callbackType := strings.TrimSpace(stringValue(callbackField(snapshot.app, "type")))
+	callbackRequestURL := strings.TrimSpace(stringValue(callbackField(snapshot.app, "url")))
+
+	// application.v6 omits event/callback config for an already published app,
+	// while app_versions still exposes stable event IDs in event_infos. A
+	// version carrying our publish marker is durable evidence that the
+	// successful additive patch was included in that audited version.
+	if snapshot.unauditVersion == nil && isManagedPublishedVersion(snapshot.activeVersion) {
+		if len(configuredEvents) == 0 {
+			configuredEvents = activeVersionEvents(snapshot.activeVersion)
+		}
+		if len(configuredCallbacks) == 0 {
+			configuredCallbacks = append([]string(nil), targetCallbackKeys...)
+		}
+		if eventSubscriptionType == "" {
+			eventSubscriptionType = s.policy.EventSubscriptionType
+		}
+		if eventRequestURL == "" {
+			eventRequestURL = strings.TrimSpace(s.policy.EventRequestURL)
+		}
+		if callbackType == "" {
+			callbackType = s.policy.CallbackType
+		}
+		if callbackRequestURL == "" {
+			callbackRequestURL = strings.TrimSpace(s.policy.CallbackRequestURL)
+		}
+	}
 
 	diff := AutoConfigDiff{
 		MissingScopes:                 subtractScopeRefs(targetScopeRefs, configuredScopes),
@@ -291,17 +345,14 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 		ExtraEvents:                   subtractStrings(configuredEvents, targetEventKeys),
 		MissingCallbacks:              subtractStrings(targetCallbackKeys, configuredCallbacks),
 		ExtraCallbacks:                subtractStrings(configuredCallbacks, targetCallbackKeys),
-		EventSubscriptionTypeMismatch: strings.TrimSpace(stringValue(subscribedEventField(snapshot.app, "type"))) != s.policy.EventSubscriptionType,
-		EventRequestURLMismatch:       strings.TrimSpace(stringValue(subscribedEventField(snapshot.app, "url"))) != s.policy.EventRequestURL,
-		CallbackTypeMismatch:          strings.TrimSpace(stringValue(callbackField(snapshot.app, "type"))) != s.policy.CallbackType,
-		CallbackRequestURLMismatch:    strings.TrimSpace(stringValue(callbackField(snapshot.app, "url"))) != s.policy.CallbackRequestURL,
+		EventSubscriptionTypeMismatch: eventSubscriptionType != s.policy.EventSubscriptionType,
+		EventRequestURLMismatch:       eventRequestURL != s.policy.EventRequestURL,
+		CallbackTypeMismatch:          callbackType != s.policy.CallbackType,
+		CallbackRequestURLMismatch:    callbackRequestURL != s.policy.CallbackRequestURL,
 	}
 	diff.ConfigPatchRequired = len(diff.MissingScopes) > 0 ||
-		len(diff.ExtraScopes) > 0 ||
 		len(diff.MissingEvents) > 0 ||
-		len(diff.ExtraEvents) > 0 ||
 		len(diff.MissingCallbacks) > 0 ||
-		len(diff.ExtraCallbacks) > 0 ||
 		diff.EventSubscriptionTypeMismatch ||
 		diff.EventRequestURLMismatch ||
 		diff.CallbackTypeMismatch ||
@@ -315,11 +366,11 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 		Current: AutoConfigObservedState{
 			ConfiguredScopes:            configuredScopes,
 			GrantedScopes:               grantedScopes,
-			EventSubscriptionType:       strings.TrimSpace(stringValue(subscribedEventField(snapshot.app, "type"))),
-			EventRequestURL:             strings.TrimSpace(stringValue(subscribedEventField(snapshot.app, "url"))),
+			EventSubscriptionType:       eventSubscriptionType,
+			EventRequestURL:             eventRequestURL,
 			ConfiguredEvents:            configuredEvents,
-			CallbackType:                strings.TrimSpace(stringValue(callbackField(snapshot.app, "type"))),
-			CallbackRequestURL:          strings.TrimSpace(stringValue(callbackField(snapshot.app, "url"))),
+			CallbackType:                callbackType,
+			CallbackRequestURL:          callbackRequestURL,
 			ConfiguredCallbacks:         configuredCallbacks,
 			OnlineVersionID:             versionID(snapshot.onlineVersion),
 			OnlineVersion:               versionString(snapshot.onlineVersion),
@@ -491,7 +542,7 @@ func derivePlanState(plan AutoConfigPlan) (string, string) {
 
 func (s *autoConfigService) buildConfigPatchRequest(diff AutoConfigDiff) v7PatchConfigRequest {
 	var req v7PatchConfigRequest
-	if len(diff.MissingScopes) > 0 || len(diff.ExtraScopes) > 0 {
+	if len(diff.MissingScopes) > 0 {
 		scopeReq := &v7PatchConfigScope{}
 		for _, item := range diff.MissingScopes {
 			scopeReq.AddScopes = append(scopeReq.AddScopes, v7PatchConfigScopeItem{
@@ -499,33 +550,103 @@ func (s *autoConfigService) buildConfigPatchRequest(diff AutoConfigDiff) v7Patch
 				TokenType: normalizeTokenType(item.ScopeType),
 			})
 		}
-		for _, item := range diff.ExtraScopes {
-			scopeReq.RemoveScopes = append(scopeReq.RemoveScopes, v7PatchConfigScopeItem{
-				ScopeName: strings.TrimSpace(item.Scope),
-				TokenType: normalizeTokenType(item.ScopeType),
-			})
-		}
 		req.Scope = scopeReq
 	}
-	if len(diff.MissingEvents) > 0 || len(diff.ExtraEvents) > 0 || diff.EventSubscriptionTypeMismatch || diff.EventRequestURLMismatch {
-		requestURL := s.policy.EventRequestURL
+	if len(diff.MissingEvents) > 0 || diff.EventSubscriptionTypeMismatch || diff.EventRequestURLMismatch {
 		req.Event = &v7PatchConfigEvent{
 			SubscriptionType: s.policy.EventSubscriptionType,
-			RequestURL:       &requestURL,
 			AddEvents:        append([]string(nil), diff.MissingEvents...),
-			RemoveEvents:     append([]string(nil), diff.ExtraEvents...),
+		}
+		if requestURL := strings.TrimSpace(s.policy.EventRequestURL); requestURL != "" {
+			req.Event.RequestURL = &requestURL
 		}
 	}
-	if len(diff.MissingCallbacks) > 0 || len(diff.ExtraCallbacks) > 0 || diff.CallbackTypeMismatch || diff.CallbackRequestURLMismatch {
-		requestURL := s.policy.CallbackRequestURL
+	if len(diff.MissingCallbacks) > 0 || diff.CallbackTypeMismatch || diff.CallbackRequestURLMismatch {
 		req.Callback = &v7PatchConfigCallback{
-			CallbackType:    s.policy.CallbackType,
-			RequestURL:      &requestURL,
-			AddCallbacks:    append([]string(nil), diff.MissingCallbacks...),
-			RemoveCallbacks: append([]string(nil), diff.ExtraCallbacks...),
+			CallbackType: s.policy.CallbackType,
+			AddCallbacks: append([]string(nil), diff.MissingCallbacks...),
+		}
+		if requestURL := strings.TrimSpace(s.policy.CallbackRequestURL); requestURL != "" {
+			req.Callback.RequestURL = &requestURL
 		}
 	}
 	return req
+}
+
+func projectAppliedPlan(plan AutoConfigPlan, actions []AutoConfigAction) AutoConfigPlan {
+	configApplied := false
+	abilityApplied := false
+	for _, action := range actions {
+		if action.Outcome != "applied" {
+			continue
+		}
+		switch action.Name {
+		case "config_patch":
+			configApplied = true
+		case "ability_patch":
+			abilityApplied = true
+		}
+	}
+	if configApplied {
+		plan.Current.ConfiguredScopes = sortScopeRefs(append(plan.Current.ConfiguredScopes, plan.Diff.MissingScopes...))
+		plan.Current.ConfiguredEvents = sortUniqueStrings(append(plan.Current.ConfiguredEvents, plan.Diff.MissingEvents...))
+		plan.Current.ConfiguredCallbacks = sortUniqueStrings(append(plan.Current.ConfiguredCallbacks, plan.Diff.MissingCallbacks...))
+		plan.Current.EventSubscriptionType = plan.Target.Policy.EventSubscriptionType
+		plan.Current.EventRequestURL = strings.TrimSpace(plan.Target.Policy.EventRequestURL)
+		plan.Current.CallbackType = plan.Target.Policy.CallbackType
+		plan.Current.CallbackRequestURL = strings.TrimSpace(plan.Target.Policy.CallbackRequestURL)
+		plan.Diff.ConfigPatchRequired = false
+		plan.Diff.MissingScopes = nil
+		plan.Diff.MissingEvents = nil
+		plan.Diff.MissingCallbacks = nil
+		plan.Diff.EventSubscriptionTypeMismatch = false
+		plan.Diff.EventRequestURLMismatch = false
+		plan.Diff.CallbackTypeMismatch = false
+		plan.Diff.CallbackRequestURLMismatch = false
+	}
+	if abilityApplied {
+		plan.Current.BotEnabled = plan.Target.Policy.BotEnabled
+		plan.Diff.AbilityPatchRequired = false
+	}
+	if !plan.Diff.ConfigPatchRequired && !plan.Diff.AbilityPatchRequired && (configApplied || abilityApplied) {
+		plan.Status = AutoConfigStatusPublishRequired
+		plan.Summary = "配置已写入待发布草稿，仍需提交发布。"
+		plan.BlockingReason = ""
+		plan.BlockingRequirements = nil
+		plan.DegradableRequirements = nil
+		plan.Diff.PublishRequired = true
+		plan.Publish.NeedsPublish = true
+		plan.Publish.AwaitingReview = false
+	}
+	return plan
+}
+
+func projectPublishedPlan(plan AutoConfigPlan, versionID string, version string) AutoConfigPlan {
+	if strings.TrimSpace(versionID) == "" ||
+		(plan.Status != AutoConfigStatusApplyRequired && plan.Status != AutoConfigStatusPublishRequired) {
+		return plan
+	}
+	plan.Status = AutoConfigStatusAwaitingReview
+	plan.Summary = "飞书应用版本已提交，等待平台状态刷新或管理员审核。"
+	plan.BlockingReason = ""
+	plan.BlockingRequirements = nil
+	plan.DegradableRequirements = nil
+	plan.Diff.ConfigPatchRequired = false
+	plan.Diff.AbilityPatchRequired = false
+	plan.Diff.MissingScopes = nil
+	plan.Diff.MissingEvents = nil
+	plan.Diff.MissingCallbacks = nil
+	plan.Diff.EventSubscriptionTypeMismatch = false
+	plan.Diff.EventRequestURLMismatch = false
+	plan.Diff.CallbackTypeMismatch = false
+	plan.Diff.CallbackRequestURLMismatch = false
+	plan.Diff.PublishRequired = false
+	plan.Publish.UnauditVersionID = strings.TrimSpace(versionID)
+	plan.Publish.UnauditVersion = strings.TrimSpace(version)
+	plan.Publish.UnauditVersionStatus = "under_audit"
+	plan.Publish.NeedsPublish = false
+	plan.Publish.AwaitingReview = true
+	return plan
 }
 
 func overridePlanFromAPIError(plan AutoConfigPlan, err error) AutoConfigPlan {
@@ -567,7 +688,10 @@ func getApplicationConfig(ctx context.Context, broker *FeishuCallBroker, client 
 		Retry:      RetrySafe,
 		Permission: PermissionFailFast,
 	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkapplication.GetApplicationResp, error) {
-		req := larkapplication.NewGetApplicationReqBuilder().AppId(strings.TrimSpace(appID)).Build()
+		req := larkapplication.NewGetApplicationReqBuilder().
+			AppId(strings.TrimSpace(appID)).
+			Lang("zh_cn").
+			Build()
 		return sdkClient.Application.V6.Application.Get(callCtx, req)
 	})
 	if err != nil {
@@ -594,6 +718,7 @@ func getApplicationVersion(ctx context.Context, broker *FeishuCallBroker, client
 		req := larkapplication.NewGetApplicationAppVersionReqBuilder().
 			AppId(strings.TrimSpace(appID)).
 			VersionId(strings.TrimSpace(versionID)).
+			Lang("zh_cn").
 			Build()
 		return sdkClient.Application.V6.ApplicationAppVersion.Get(callCtx, req)
 	})
@@ -715,9 +840,6 @@ func activeVersionEvents(version *larkapplication.ApplicationAppVersion) []strin
 	if version == nil {
 		return nil
 	}
-	if len(version.Events) > 0 {
-		return sortUniqueStrings(version.Events)
-	}
 	out := make([]string, 0, len(version.EventInfos))
 	for _, item := range version.EventInfos {
 		if item == nil {
@@ -727,7 +849,18 @@ func activeVersionEvents(version *larkapplication.ApplicationAppVersion) []strin
 			out = append(out, key)
 		}
 	}
-	return sortUniqueStrings(out)
+	if len(out) > 0 {
+		return sortUniqueStrings(out)
+	}
+	return sortUniqueStrings(version.Events)
+}
+
+func isManagedPublishedVersion(version *larkapplication.ApplicationAppVersion) bool {
+	return version != nil &&
+		versionStatusLabel(version) == "audited" &&
+		version.Remark != nil &&
+		strings.TrimSpace(stringValue(version.Remark.Remark)) == autoConfigDefaultPublishRemark &&
+		strings.TrimSpace(stringValue(version.Remark.UpdateRemark)) == autoConfigDefaultPublishChangelog
 }
 
 func observedBotEnabled(version *larkapplication.ApplicationAppVersion) bool {

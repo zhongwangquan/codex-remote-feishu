@@ -251,9 +251,9 @@ func parseLaunchdPrintDisabled(output, label string) (bool, bool) {
 			continue
 		}
 		switch strings.Trim(strings.TrimSpace(strings.ToLower(right)), ";") {
-		case "true":
+		case "true", "disabled":
 			return false, true
-		case "false":
+		case "false", "enabled":
 			return true, true
 		default:
 			return false, false

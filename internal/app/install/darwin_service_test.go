@@ -718,6 +718,24 @@ func TestParseLaunchdPrintDisabled(t *testing.T) {
 			ok:      true,
 		},
 		{
+			name: "explicit disabled word",
+			output: `disabled services = {
+	"com.codex-remote.service" => disabled
+}`,
+			label:   "com.codex-remote.service",
+			enabled: false,
+			ok:      true,
+		},
+		{
+			name: "explicit enabled word",
+			output: `disabled services = {
+	"com.codex-remote.service" => enabled
+}`,
+			label:   "com.codex-remote.service",
+			enabled: true,
+			ok:      true,
+		},
+		{
 			name: "absent means enabled",
 			output: `disabled services = {
 }`,
