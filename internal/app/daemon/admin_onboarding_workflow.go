@@ -39,7 +39,7 @@ const (
 )
 
 type onboardingWorkflowResponse struct {
-	Apps                []adminFeishuAppSummary           `json:"apps,omitempty"`
+	Apps                []adminFeishuAppSummary           `json:"apps"`
 	SelectedAppID       string                            `json:"selectedAppId,omitempty"`
 	CurrentStage        string                            `json:"currentStage"`
 	MachineState        string                            `json:"machineState"`
@@ -186,7 +186,7 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 	completion := buildOnboardingCompletion(canComplete, runtimeReqs.Ready, connection, autoConfig, menu, autostartStage, vscodeStage)
 
 	response := onboardingWorkflowResponse{
-		Apps:                apps,
+		Apps:                append([]adminFeishuAppSummary{}, apps...),
 		SelectedAppID:       selectedAppID,
 		CurrentStage:        currentStage,
 		MachineState:        machineState,

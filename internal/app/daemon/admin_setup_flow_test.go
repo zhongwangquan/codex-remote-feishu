@@ -29,6 +29,32 @@ func stubSetupAutoConfigPlan(t *testing.T, plan feishu.AutoConfigPlan) {
 	})
 }
 
+func TestSetupOnboardingWorkflowIncludesEmptyAppsArray(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	app, token := newRemoteSetupTestApp(t, home)
+	cookie := exchangeSetupSessionCookie(t, app, token)
+
+	req := performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow", "", cookie)
+	rec := performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workflow status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]json.RawMessage
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode workflow: %v", err)
+	}
+	apps, ok := payload["apps"]
+	if !ok {
+		t.Fatalf("workflow response omitted required apps array: %#v", payload)
+	}
+	if string(apps) != "[]" {
+		t.Fatalf("apps = %s, want []", apps)
+	}
+}
+
 func TestSetupSessionCanUseFeishuAndVSCodeSetupAPIsAfterCredentialsSaved(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
