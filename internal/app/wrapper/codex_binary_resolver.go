@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -14,13 +15,23 @@ import (
 )
 
 func resolveNormalCodexBinary(configPath, configured string) (string, error) {
-	return resolveNormalCodexBinaryWithOptions(configPath, configured, true)
+	return resolveNormalCodexBinaryForIntegration(configPath, configured, "", true)
+}
+
+func resolveNormalCodexBinaryForIntegration(configPath, configured, integrationMode string, persist bool) (string, error) {
+	return resolveNormalCodexBinaryWithOptions(
+		configPath,
+		configured,
+		integrationMode,
+		persist,
+		codexDesktopBinaryCandidates(runtime.GOOS, userHomeDir()),
+	)
 }
 
 // ResolveNormalCodexBinaryPreview returns the same effective binary selection
 // that the wrapper would use at runtime, but without rewriting config.
-func ResolveNormalCodexBinaryPreview(configured string) (string, error) {
-	return resolveNormalCodexBinaryWithOptions("", configured, false)
+func ResolveNormalCodexBinaryPreview(configured, integrationMode string) (string, error) {
+	return resolveNormalCodexBinaryForIntegration("", configured, integrationMode, false)
 }
 
 // LooksLikeVSCodeBundleCodexPath reports whether the given path points into a
@@ -29,7 +40,13 @@ func LooksLikeVSCodeBundleCodexPath(path string) bool {
 	return looksLikeVSCodeBundleCodexPath(path)
 }
 
-func resolveNormalCodexBinaryWithOptions(configPath, configured string, persist bool) (string, error) {
+// LooksLikeCodexDesktopBinaryPath reports whether the given path points to the
+// Codex binary bundled with the macOS ChatGPT desktop app.
+func LooksLikeCodexDesktopBinaryPath(path string) bool {
+	return looksLikeCodexDesktopBinaryPath(path)
+}
+
+func resolveNormalCodexBinaryWithOptions(configPath, configured, integrationMode string, persist bool, desktopCandidates []string) (string, error) {
 	configured = strings.TrimSpace(configured)
 	if configured == "" {
 		return configured, nil
@@ -38,6 +55,15 @@ func resolveNormalCodexBinaryWithOptions(configPath, configured string, persist 
 		return configured, nil
 	}
 	if looksLikePATHCodexCommand(configured) {
+		if strings.EqualFold(strings.TrimSpace(integrationMode), "none") {
+			if desktopBinary := firstUsableCodexDesktopBinary(desktopCandidates); desktopBinary != "" {
+				if persist {
+					persistNormalCodexBinary(configPath, desktopBinary)
+				}
+				log.Printf("wrapper: normal mode selected Codex Desktop binary %q instead of PATH command %q", desktopBinary, configured)
+				return desktopBinary, nil
+			}
+		}
 		if _, err := exec.LookPath(configured); err == nil {
 			return configured, nil
 		}
@@ -68,6 +94,42 @@ func resolveNormalCodexBinaryWithOptions(configPath, configured string, persist 
 	}
 
 	return "", fmt.Errorf("shared normal codex binary points to vscode bundle path %q and no PATH codex or usable vscode bundle codex is available", configured)
+}
+
+func userHomeDir() string {
+	home, _ := os.UserHomeDir()
+	return home
+}
+
+func codexDesktopBinaryCandidates(goos, home string) []string {
+	if goos != "darwin" {
+		return nil
+	}
+	candidates := []string{
+		filepath.Join(string(filepath.Separator), "Applications", "ChatGPT.app", "Contents", "Resources", "codex"),
+	}
+	if home = strings.TrimSpace(home); home != "" {
+		candidates = append(candidates, filepath.Join(home, "Applications", "ChatGPT.app", "Contents", "Resources", "codex"))
+	}
+	return candidates
+}
+
+func firstUsableCodexDesktopBinary(candidates []string) string {
+	for _, candidate := range candidates {
+		candidate = cleanPath(candidate)
+		if candidate == "" || !looksLikeCodexDesktopBinaryPath(candidate) {
+			continue
+		}
+		if resolved, err := exec.LookPath(candidate); err == nil {
+			return resolved
+		}
+	}
+	return ""
+}
+
+func looksLikeCodexDesktopBinaryPath(path string) bool {
+	normalized := normalizedPathKey(path)
+	return strings.HasSuffix(normalized, "/chatgpt.app/contents/resources/codex")
 }
 
 func looksLikePATHCodexCommand(value string) bool {

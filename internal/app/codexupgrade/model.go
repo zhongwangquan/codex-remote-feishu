@@ -48,6 +48,7 @@ func (i Installation) CurrentVersion() string {
 
 type InspectOptions struct {
 	ConfiguredBinary string
+	IntegrationMode  string
 	NPMCommand       string
 }
 

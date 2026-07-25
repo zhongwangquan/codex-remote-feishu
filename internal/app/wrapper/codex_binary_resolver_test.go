@@ -162,6 +162,81 @@ func TestResolveNormalCodexBinarySkipsHealingForExplicitOverride(t *testing.T) {
 	}
 }
 
+func TestResolveNormalCodexBinaryPrefersDesktopForNormalMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	pathDir := filepath.Join(home, "bin")
+	writeResolverExecutable(t, filepath.Join(pathDir, "codex"))
+	t.Setenv("PATH", pathDir)
+
+	desktopBinary := filepath.Join(home, "Applications", "ChatGPT.app", "Contents", "Resources", "codex")
+	writeResolverExecutable(t, desktopBinary)
+	configPath := writeResolverConfig(t, home, "codex")
+
+	got, err := resolveNormalCodexBinaryWithOptions(
+		configPath,
+		"codex",
+		"none",
+		true,
+		[]string{desktopBinary},
+	)
+	if err != nil {
+		t.Fatalf("resolveNormalCodexBinaryWithOptions: %v", err)
+	}
+	if got != desktopBinary {
+		t.Fatalf("resolved codex binary = %q, want desktop binary %q", got, desktopBinary)
+	}
+
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	if loaded.Config.Wrapper.CodexRealBinary != desktopBinary {
+		t.Fatalf("persisted codex real binary = %q, want %q", loaded.Config.Wrapper.CodexRealBinary, desktopBinary)
+	}
+}
+
+func TestResolveNormalCodexBinaryKeepsPATHForManagedShim(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	pathDir := filepath.Join(home, "bin")
+	writeResolverExecutable(t, filepath.Join(pathDir, "codex"))
+	t.Setenv("PATH", pathDir)
+
+	desktopBinary := filepath.Join(home, "Applications", "ChatGPT.app", "Contents", "Resources", "codex")
+	writeResolverExecutable(t, desktopBinary)
+
+	got, err := resolveNormalCodexBinaryWithOptions(
+		"",
+		"codex",
+		"managed_shim",
+		false,
+		[]string{desktopBinary},
+	)
+	if err != nil {
+		t.Fatalf("resolveNormalCodexBinaryWithOptions: %v", err)
+	}
+	if got != "codex" {
+		t.Fatalf("resolved codex binary = %q, want PATH command codex", got)
+	}
+}
+
+func TestCodexDesktopBinaryCandidatesAreMacOSOnly(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "Users", "tester")
+	if got := codexDesktopBinaryCandidates("linux", home); len(got) != 0 {
+		t.Fatalf("linux desktop candidates = %#v, want none", got)
+	}
+	got := codexDesktopBinaryCandidates("darwin", home)
+	if len(got) != 2 {
+		t.Fatalf("darwin desktop candidates = %#v, want system and user application paths", got)
+	}
+	for _, candidate := range got {
+		if !looksLikeCodexDesktopBinaryPath(candidate) {
+			t.Fatalf("candidate %q was not recognized as a Codex Desktop binary", candidate)
+		}
+	}
+}
+
 func writeResolverConfig(t *testing.T, home, codexRealBinary string) string {
 	t.Helper()
 	configPath := filepath.Join(home, ".config", "codex-remote", "config.json")

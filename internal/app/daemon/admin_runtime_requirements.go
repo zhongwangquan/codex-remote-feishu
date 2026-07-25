@@ -68,10 +68,18 @@ func (a *App) buildRuntimeRequirementsResponse() (runtimeRequirementsResponse, e
 func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, currentBinary string) (runtimeRequirementsResponse, error) {
 	codexRealBinary, source := resolvedCodexRealBinarySetting(loaded)
 	lookupMode := codexBinaryLookupMode(codexRealBinary)
-	effectiveRealBinary, resolveErr := wrapper.ResolveNormalCodexBinaryPreview(codexRealBinary)
+	effectiveRealBinary, resolveErr := wrapper.ResolveNormalCodexBinaryPreview(
+		codexRealBinary,
+		loaded.Config.Wrapper.IntegrationMode,
+	)
 	resolvedRealBinary := ""
 	if resolveErr == nil && strings.TrimSpace(effectiveRealBinary) != "" {
 		resolvedRealBinary, resolveErr = resolveExecutablePath(effectiveRealBinary)
+	}
+	if lookupMode == "path_search" &&
+		strings.EqualFold(strings.TrimSpace(loaded.Config.Wrapper.IntegrationMode), "none") &&
+		wrapper.LooksLikeCodexDesktopBinaryPath(resolvedRealBinary) {
+		lookupMode = "desktop_app"
 	}
 	resolvedClaudeBinary := ""
 	claudeResolveErr := error(nil)
@@ -177,6 +185,14 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 	}
 
 	switch lookupMode {
+	case "desktop_app":
+		checks = append(checks, runtimeRequirementCheck{
+			ID:      "lookup_mode",
+			Title:   "二进制定位方式",
+			Status:  runtimeRequirementStatusPass,
+			Summary: "当前 normal 模式会使用 Codex Desktop 自带的可执行文件，与桌面任务存储保持兼容。",
+			Detail:  resolvedRealBinary,
+		})
 	case "absolute":
 		checks = append(checks, runtimeRequirementCheck{
 			ID:      "lookup_mode",

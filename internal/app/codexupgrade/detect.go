@@ -24,7 +24,7 @@ func Inspect(ctx context.Context, opts InspectOptions) Installation {
 		return info
 	}
 
-	effective, err := wrapper.ResolveNormalCodexBinaryPreview(info.ConfiguredBinary)
+	effective, err := wrapper.ResolveNormalCodexBinaryPreview(info.ConfiguredBinary, opts.IntegrationMode)
 	if err != nil {
 		info.Problem = err.Error()
 		info.EffectiveBinary = info.ConfiguredBinary

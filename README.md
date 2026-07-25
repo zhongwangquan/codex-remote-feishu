@@ -136,6 +136,8 @@ Windows PowerShell:
 
 启动后打开输出中的 `/setup` 链接，后续飞书配置、normal mode 使用准备、以及按需的 VS Code detect/apply 和 shim 重装都在 WebSetup / Admin UI 完成。
 
+在 macOS 上使用默认 `normal` 模式且未手动指定 Codex 路径时，后台会优先使用 `ChatGPT.app` 内与 Codex Desktop 配套的 Codex 可执行文件，而不是 PATH 中可能较旧的 CLI。这样可以避免旧 CLI 读取新版桌面任务时出现 `rollout ... does not start with session metadata`。该选择不会修改或接管 VS Code；显式配置 `CODEX_REAL_BINARY` 或绝对路径仍然优先。
+
 ## 当前用户升级方式
 
 如果你已经完成安装，后续要升级到当前 track 的最新版本，面向用户的推荐入口统一是：

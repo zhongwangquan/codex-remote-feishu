@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-05-31`
-> Summary: 同步当前安装、配置与部署模型，并补记 shared packaged-install contract 的跨平台启动语义：packaged installer 不再直接决定底层 `service-manager`；first-install 走平台默认登录后自动启动，repair 保持现有启动方式；Windows NSIS 包装层现已固定为 `probe + install + 结果页` 模型。
+> Updated: `2026-07-25`
+> Summary: 同步当前安装、配置与部署模型，并补记 shared packaged-install contract 的跨平台启动语义，以及 macOS normal 模式与 Codex Desktop 任务存储保持版本兼容的二进制选择规则。
 
 ## 1. 范围
 
@@ -126,6 +126,14 @@ Windows PowerShell:
 - 写当前安装来源、track、version、稳定入口路径和版本缓存根目录
 - 不直接改 VS Code
 - 启动 daemon 并输出 WebSetup / Admin URL
+
+macOS 上的默认 `normal` 模式还遵循下面的 Codex 二进制选择规则：
+
+- 当 `wrapper.codexRealBinary` 仍是默认 PATH 命令 `codex`，且没有 `CODEX_REAL_BINARY` 显式覆盖时，优先使用 `/Applications/ChatGPT.app/Contents/Resources/codex`；同时支持用户目录下的 `~/Applications/ChatGPT.app`。
+- 选择成功后会把绝对路径写回配置，使 launchd 和交互式 shell 使用同一目标。
+- 这样由 Codex Desktop 写入的任务始终由配套 app-server 读取，避免 PATH 中旧 CLI 无法解析新版 `session_meta`。
+- `managed_shim` 不应用这条 normal-mode 规则，继续保持原来的 PATH / VS Code bundle 解析边界。
+- 显式的 `CODEX_REAL_BINARY` 或绝对路径优先，不会被自动选择覆盖。
 
 ### 3.2 仍保留的高级模式
 

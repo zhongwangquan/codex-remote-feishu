@@ -49,6 +49,7 @@ func (a *App) inspectStandaloneCodexInstallation(ctx context.Context) (codexupgr
 	}
 	return inspect(ctx, codexupgrade.InspectOptions{
 		ConfiguredBinary: configured,
+		IntegrationMode:  loaded.Config.Wrapper.IntegrationMode,
 	})
 }
 

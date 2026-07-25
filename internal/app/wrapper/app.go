@@ -80,7 +80,12 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	loaded.CodexRealBinary, err = resolveNormalCodexBinary(loaded.ConfigPath, loaded.CodexRealBinary)
+	loaded.CodexRealBinary, err = resolveNormalCodexBinaryForIntegration(
+		loaded.ConfigPath,
+		loaded.CodexRealBinary,
+		loaded.IntegrationMode,
+		true,
+	)
 	if err != nil {
 		return Config{}, err
 	}
