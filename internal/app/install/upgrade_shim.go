@@ -1,3 +1,5 @@
+//go:build !codex_upgrade_shim
+
 package install
 
 import (

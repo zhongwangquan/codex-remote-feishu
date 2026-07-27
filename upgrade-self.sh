@@ -53,13 +53,27 @@ resolve_build_branch() {
 wait_for_admin_recovery() {
   local admin_base="$1"
   local timeout_sec="$2"
+  local state_path="$3"
+  local pid_path="$4"
+  local current_binary_path="$5"
+  local expected_binary_path="$6"
+  local previous_pid="$7"
   local deadline=$(( $(date +%s) + timeout_sec ))
   local bootstrap=""
+  local current_pid=""
 
   while (( $(date +%s) < deadline )); do
-    if curl --noproxy '*' -fsS "${admin_base%/}/healthz" >/dev/null 2>&1; then
+    if grep -Eq '"phase"[[:space:]]*:[[:space:]]*"(failed|rolled_back)"' "${state_path}" 2>/dev/null; then
+      return 2
+    fi
+    current_pid="$(tr -d '[:space:]' < "${pid_path}" 2>/dev/null || true)"
+    if [[ "${current_pid}" =~ ^[0-9]+$ ]] && \
+       { [[ -z "${previous_pid}" ]] || [[ "${current_pid}" != "${previous_pid}" ]]; } && \
+       grep -Eq '"phase"[[:space:]]*:[[:space:]]*"committed"' "${state_path}" 2>/dev/null && \
+       cmp -s "${current_binary_path}" "${expected_binary_path}" && \
+       curl --noproxy '*' -fsS "${admin_base%/}/healthz" >/dev/null 2>&1; then
       bootstrap="$(curl --noproxy '*' -fsS "${admin_base%/}/api/admin/bootstrap-state" 2>/dev/null || true)"
-      if [[ "${bootstrap}" == *'"setupRequired":true'* ]]; then
+      if grep -Eq '"setupRequired"[[:space:]]*:[[:space:]]*true' <<<"${bootstrap}"; then
         sleep 1
         continue
       fi
@@ -143,6 +157,15 @@ if [[ ! -f "${CODEX_REMOTE_SELF_TARGET_STATE_PATH}" ]]; then
   exit 1
 fi
 
+PREVIOUS_PID=""
+if [[ -f "${CODEX_REMOTE_SELF_TARGET_PID_PATH}" ]]; then
+  PREVIOUS_PID="$(tr -d '[:space:]' < "${CODEX_REMOTE_SELF_TARGET_PID_PATH}")"
+  if ! [[ "${PREVIOUS_PID}" =~ ^[0-9]+$ ]]; then
+    echo "invalid current daemon pid in ${CODEX_REMOTE_SELF_TARGET_PID_PATH}" >&2
+    exit 1
+  fi
+fi
+
 printf '[3/6] write controller record %s\n' "${RECORD_PATH}"
 mkdir -p "${RECORD_DIR}"
 cat > "${RECORD_PATH}" <<EOF
@@ -182,11 +205,23 @@ if [[ "${NO_WAIT}" == "1" ]]; then
 fi
 
 printf 'waiting up to %ss for current daemon self target to recover via %s\n' "${WAIT_TIMEOUT_SEC}" "${CODEX_REMOTE_SELF_TARGET_ADMIN_URL}"
-if wait_for_admin_recovery "${CODEX_REMOTE_SELF_TARGET_ADMIN_URL}" "${WAIT_TIMEOUT_SEC}"; then
+wait_status=0
+wait_for_admin_recovery \
+  "${CODEX_REMOTE_SELF_TARGET_ADMIN_URL}" \
+  "${WAIT_TIMEOUT_SEC}" \
+  "${CODEX_REMOTE_SELF_TARGET_STATE_PATH}" \
+  "${CODEX_REMOTE_SELF_TARGET_PID_PATH}" \
+  "${CODEX_REMOTE_SELF_TARGET_CURRENT_BINARY_PATH}" \
+  "${CODEX_REMOTE_SELF_TARGET_LOCAL_UPGRADE_ARTIFACT_PATH}" \
+  "${PREVIOUS_PID}" || wait_status=$?
+if [[ "${wait_status}" == "0" ]]; then
   printf 'self upgrade recovered successfully\n'
   exit 0
 fi
 
+if [[ "${wait_status}" == "2" ]]; then
+  echo "self upgrade transaction failed or rolled back" >&2
+fi
 echo "self upgrade did not recover within ${WAIT_TIMEOUT_SEC}s" >&2
 echo "admin: ${CODEX_REMOTE_SELF_TARGET_ADMIN_URL}" >&2
 echo "log: ${CODEX_REMOTE_SELF_TARGET_LOG_PATH}" >&2

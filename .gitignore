@@ -10,6 +10,7 @@ coverage.out
 *.out
 .DS_Store
 .tools/
+.codex-remote/
 web/node_modules/
 web/.vite/
 .vscode/

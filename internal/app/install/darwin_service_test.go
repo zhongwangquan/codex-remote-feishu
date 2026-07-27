@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func withDarwinGOOS(t *testing.T) func() {
@@ -21,6 +22,17 @@ func withMockLaunchctl(t *testing.T, fn func(ctx context.Context, args ...string
 	originalRunner := launchctlUserRunner
 	launchctlUserRunner = fn
 	return func() { launchctlUserRunner = originalRunner }
+}
+
+func withMockLaunchdDaemonProcess(t *testing.T, readPID func(string) (int, error), processAlive func(int) bool) func() {
+	originalReadPID := launchdUserReadPID
+	originalProcessAlive := launchdUserProcessIsAlive
+	launchdUserReadPID = readPID
+	launchdUserProcessIsAlive = processAlive
+	return func() {
+		launchdUserReadPID = originalReadPID
+		launchdUserProcessIsAlive = originalProcessAlive
+	}
 }
 
 func TestParseServiceManagerRejectsLaunchdUserOutsideDarwin(t *testing.T) {
@@ -555,6 +567,48 @@ func TestLaunchdUserIsRunningReturnsFalseWhenNotFound(t *testing.T) {
 	}
 	if running {
 		t.Fatal("expected running=false for not-found domain")
+	}
+}
+
+func TestLaunchdUserStopAndWaitWaitsForDaemonProcessAfterJobDisappears(t *testing.T) {
+	defer withDarwinGOOS(t)()
+	baseDir := t.TempDir()
+	stubServiceUserHome(t, baseDir)
+
+	state := InstallState{
+		InstanceID: "stable",
+		BaseDir:    baseDir,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		InstanceID:     state.InstanceID,
+		BaseDir:        state.BaseDir,
+		ServiceManager: ServiceManagerLaunchdUser,
+	})
+
+	defer withMockLaunchctl(t, func(_ context.Context, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "print" {
+			return "", fmt.Errorf("Could not find service")
+		}
+		return "", nil
+	})()
+
+	processChecks := 0
+	defer withMockLaunchdDaemonProcess(t,
+		func(string) (int, error) { return 12345, nil },
+		func(pid int) bool {
+			if pid != 12345 {
+				t.Fatalf("process pid = %d, want 12345", pid)
+			}
+			processChecks++
+			return processChecks < 3
+		},
+	)()
+
+	if err := launchdUserStopAndWait(context.Background(), state, time.Second, time.Millisecond); err != nil {
+		t.Fatalf("launchdUserStopAndWait: %v", err)
+	}
+	if processChecks != 3 {
+		t.Fatalf("process checks = %d, want 3", processChecks)
 	}
 }
 

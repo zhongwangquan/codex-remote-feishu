@@ -1,7 +1,7 @@
 # 本地自升级流程
 
 > Type: `general`
-> Updated: `2026-04-27`
+> Updated: `2026-07-28`
 > Summary: 说明 repo 构建产物触发本地自升级时的完整时序、内嵌 upgrade shim 的释放与启动方式、与 `/upgrade dev` 的边界、自动回滚规则，以及 repo install target 与当前 daemon self target 的语义边界。
 
 ## 1. 这份文档回答什么问题
@@ -63,9 +63,18 @@
 - 用当前 repo checkout 重新构建 `./bin/codex-remote`
 - 把构建产物复制到当前 daemon 的 fixed local-upgrade artifact 路径
 - 用刚构建出的 binary 直接执行 `local-upgrade -state-path <selfStatePath>`
-- 可选地等待 admin health 恢复
+- 可选地等待升级事务真实提交并确认新 daemon 恢复
 
 它的设计目标就是规避“当前已安装版本太旧，无法可靠执行 `/upgrade dev` 或 `upgrade local`”这一类恢复问题。
+
+等待成功不再只以 admin health 恢复为准。controller 会同时确认：
+
+- daemon PID 已从升级前的旧 PID 切换为新 PID
+- `PendingUpgrade.phase` 已进入 `committed`
+- live installed binary 与本次 staged local artifact 完全一致
+- `/healthz`、bootstrap、runtime status 与 `/v1/status` 全部恢复
+
+因此旧 daemon 在 helper 真正停机前短暂继续响应，不会再被误判成升级成功。
 
 ### 3.2 fixed local-upgrade artifact
 
@@ -168,6 +177,8 @@ repo 里常用的辅助解析入口是：
 1. `git pull --ff-only`
 2. 准备 host 平台的内嵌 upgrade shim 资产
 3. 构建 `./bin/codex-remote`
+
+内嵌 shim 使用专用 build tag，避免 standalone shim 经 `install` 包递归嵌入旧 shim 资产；缓存摘要则来自这个真实构建配置下 `./cmd/upgrade-shim` 的完整 repo-local Go 依赖闭包及其嵌入文件，而不是手写的少数目录列表。这样 `internal/app/install` 等传递依赖发生变化时，也会强制重建 shim 资产，避免主 binary 携带旧 helper。
 
 这一步产出的 `./bin/codex-remote` 的主要用途是：
 
@@ -283,6 +294,7 @@ helper shim 入口是一个独立 binary，本身不再接受 `upgrade-helper -s
 2. 把 phase 改成 `switching`
 3. 停掉当前 daemon/service
    - 当前实现不会只看 `stop` 命令是否已发出
+   - macOS `launchd_user` 下会同时确认 launchd job 已消失、停机前捕获的 daemon PID 已真实退出
    - 只有在 helper 确认旧 daemon/service 已真正退出后，才会继续进入 binary 切换
 4. 把 `PendingUpgrade.TargetBinaryPath` 复制覆盖到 `CurrentBinaryPath`
 5. 把 phase 改成 `observing`
@@ -352,7 +364,7 @@ helper shim 入口是一个独立 binary，本身不再接受 `upgrade-helper -s
 ### 10.3 helper 不再来自“当前执行 `local-upgrade` 的 binary 副本”
 
 当前实现里，主 binary 只负责携带并释放内嵌 shim 资产。  
-是否更新 shim，不由普通业务发版直接驱动；只有 shim 本身或 sidecar schema 发生变化时，才需要重新准备对应平台的嵌入资产。
+shim 资产是否需要更新由其完整 repo-local Go 依赖闭包决定；shim 入口、sidecar schema、install/service lifecycle 或其它传递依赖变化时，都会重新准备对应平台的嵌入资产。
 
 ### 10.4 `systemd_user` 下 helper 不是原 service 的一部分
 

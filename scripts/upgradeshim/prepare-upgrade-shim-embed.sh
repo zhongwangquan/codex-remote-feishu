@@ -26,15 +26,22 @@ source_digest="$(
   {
     printf 'goversion=%s\n' "$(go env GOVERSION)"
     printf 'script=%s\n' "$(checksum_first_field "${SCRIPT_PATH}")"
-    while IFS= read -r -d '' file; do
-      printf '%s  %s\n' "$(checksum_first_field "${file}")" "${file}"
-    done < <(
-      find "${ROOT_DIR}/cmd/upgrade-shim" "${ROOT_DIR}/internal/app/upgradeshim" "${ROOT_DIR}/internal/upgradeshim" \
-        -type f -name '*.go' \
-        ! -path "${ROOT_DIR}/internal/upgradeshim/embed/*" \
-        -print0 |
-        sort -z
-    )
+    {
+      printf '%s\n' "${ROOT_DIR}/go.mod" "${ROOT_DIR}/go.sum"
+      CGO_ENABLED=0 GOOS="${GOOS_VALUE}" GOARCH="${GOARCH_VALUE}" \
+        go list -tags codex_upgrade_shim -deps \
+          -f '{{if not .Standard}}{{ $dir := .Dir }}{{range .GoFiles}}{{$dir}}/{{.}}{{"\n"}}{{end}}{{range .CgoFiles}}{{$dir}}/{{.}}{{"\n"}}{{end}}{{range .EmbedFiles}}{{$dir}}/{{.}}{{"\n"}}{{end}}{{end}}' \
+          ./cmd/upgrade-shim
+    } | sort -u | while IFS= read -r file; do
+      # The generated shim asset embeds itself through the install package.
+      # Excluding that package avoids a recursive digest.
+      if [[ "${file}" == "${ROOT_DIR}/internal/upgradeshim/embed/"* ]]; then
+        continue
+      fi
+      if [[ "${file}" == "${ROOT_DIR}/"* && -f "${file}" ]]; then
+        printf '%s  %s\n' "$(checksum_first_field "${file}")" "${file#"${ROOT_DIR}/"}"
+      fi
+    done
   } | "${checksum_cmd[@]}" | awk '{print $1}'
 )"
 
@@ -61,7 +68,7 @@ if [[ "${GOOS_VALUE}" == "windows" ]]; then
 fi
 
 CGO_ENABLED=0 GOOS="${GOOS_VALUE}" GOARCH="${GOARCH_VALUE}" \
-  go build -trimpath -ldflags "-s -w" -o "${binary_path}" ./cmd/upgrade-shim
+  go build -tags codex_upgrade_shim -trimpath -ldflags "-s -w" -o "${binary_path}" ./cmd/upgrade-shim
 
 binary_sha256="$(checksum_first_field "${binary_path}")"
 

@@ -10,9 +10,14 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
-var launchctlUserRunner = runLaunchctl
+var (
+	launchctlUserRunner       = runLaunchctl
+	launchdUserReadPID        = relayruntime.ReadPID
+	launchdUserProcessIsAlive = relayruntime.ProcessAlive
+)
 
 func runLaunchctl(ctx context.Context, args ...string) (string, error) {
 	cmd := execlaunch.CommandContext(ctx, "launchctl", args...)
@@ -280,6 +285,14 @@ func launchdUserStop(ctx context.Context, state InstallState) error {
 }
 
 func launchdUserStopAndWait(ctx context.Context, state InstallState, timeout, poll time.Duration) error {
+	pidPath := RuntimePathsForState(state).PIDFile
+	daemonPID, err := launchdUserReadPID(pidPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("read launchd daemon pid from %s: %w", pidPath, err)
+		}
+		daemonPID = 0
+	}
 	if err := launchdUserStop(ctx, state); err != nil {
 		return err
 	}
@@ -293,11 +306,12 @@ func launchdUserStopAndWait(ctx context.Context, state InstallState, timeout, po
 		if err != nil {
 			return fmt.Errorf("confirm launchd stop for %s: %w", label, err)
 		}
-		if !running {
+		daemonRunning := daemonPID > 0 && launchdUserProcessIsAlive(daemonPID)
+		if !running && !daemonRunning {
 			return nil
 		}
 		if timeout <= 0 || time.Now().After(deadline) {
-			return fmt.Errorf("launchd service %s still active after %s", label, timeout)
+			return fmt.Errorf("launchd service %s or daemon pid %d still active after %s", label, daemonPID, timeout)
 		}
 		select {
 		case <-ctx.Done():
