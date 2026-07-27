@@ -43,6 +43,10 @@ const (
 	ExternalAccessProviderEnv     = "CODEX_REMOTE_EXTERNAL_ACCESS_PROVIDER"
 	TryCloudflareBinaryEnv        = "CODEX_REMOTE_TRYCLOUDFLARE_BINARY"
 	TryCloudflareLaunchTimeoutEnv = "CODEX_REMOTE_TRYCLOUDFLARE_LAUNCH_TIMEOUT"
+	SelfHostedRelayBaseURLEnv     = "CODEX_REMOTE_SELF_HOSTED_RELAY_BASE_URL"
+	SelfHostedRelayTunnelURLEnv   = "CODEX_REMOTE_SELF_HOSTED_RELAY_TUNNEL_URL"
+	SelfHostedRelaySecretEnv      = "CODEX_REMOTE_SELF_HOSTED_RELAY_SHARED_SECRET"
+	SelfHostedRelayInstanceIDEnv  = "CODEX_REMOTE_SELF_HOSTED_RELAY_INSTANCE_ID"
 )
 
 func LoadWrapperConfig() (WrapperConfig, error) {
@@ -147,6 +151,10 @@ func ResolveExternalAccessSettings(base ExternalAccessSettings) ExternalAccessSe
 	base.Provider.Kind = chooseNonEmpty(os.Getenv(ExternalAccessProviderEnv), base.Provider.Kind)
 	base.Provider.TryCloudflare.BinaryPath = chooseNonEmpty(os.Getenv(TryCloudflareBinaryEnv), base.Provider.TryCloudflare.BinaryPath)
 	base.Provider.TryCloudflare.LaunchTimeoutSeconds = chooseInt(os.Getenv(TryCloudflareLaunchTimeoutEnv), base.Provider.TryCloudflare.LaunchTimeoutSeconds)
+	base.Provider.SelfHostedRelay.BaseURL = chooseNonEmpty(os.Getenv(SelfHostedRelayBaseURLEnv), base.Provider.SelfHostedRelay.BaseURL)
+	base.Provider.SelfHostedRelay.TunnelURL = chooseNonEmpty(os.Getenv(SelfHostedRelayTunnelURLEnv), base.Provider.SelfHostedRelay.TunnelURL)
+	base.Provider.SelfHostedRelay.SharedSecret = chooseNonEmpty(os.Getenv(SelfHostedRelaySecretEnv), base.Provider.SelfHostedRelay.SharedSecret)
+	base.Provider.SelfHostedRelay.InstanceID = chooseNonEmpty(os.Getenv(SelfHostedRelayInstanceIDEnv), base.Provider.SelfHostedRelay.InstanceID)
 	return base
 }
 

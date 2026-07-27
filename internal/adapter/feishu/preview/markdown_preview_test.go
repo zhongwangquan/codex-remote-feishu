@@ -1524,6 +1524,78 @@ func TestDriveMarkdownPreviewerFallsBackToWebPreviewWhenDriveUploadFails(t *test
 	}
 }
 
+func TestDriveMarkdownPreviewerSkipsOversizedBinaryWithoutError(t *testing.T) {
+	root := t.TempDir()
+	binPath := writePreviewFile(t, filepath.Join(root, "bin", "codex-remote"), strings.Repeat("x", 128))
+	if err := os.Chmod(binPath, 0o755); err != nil {
+		t.Fatalf("chmod %s: %v", binPath, err)
+	}
+	previewer := NewDriveMarkdownPreviewer(nil, MarkdownPreviewConfig{
+		ProcessCWD:   root,
+		CacheDir:     filepath.Join(root, "preview-cache"),
+		MaxFileBytes: 32,
+	})
+	web := &fakeWebPreviewPublisher{baseURL: "https://preview.example/g/shared/?t=token"}
+	previewer.SetWebPreviewPublisher(web)
+
+	result, err := previewer.RewriteFinalBlock(context.Background(), MarkdownPreviewRequest{
+		SurfaceSessionID: "feishu:app-1:user:ou_user",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "See [binary](bin/codex-remote).",
+		},
+	})
+	if err != nil {
+		t.Fatalf("rewrite returned error: %v", err)
+	}
+	if result.Block.Text != "See [binary](bin/codex-remote)." {
+		t.Fatalf("expected oversized binary link to remain unchanged, got %q", result.Block.Text)
+	}
+	if len(web.issuedFor) != 0 {
+		t.Fatalf("expected no web preview to be issued for oversized binary, got %#v", web.issuedFor)
+	}
+}
+
+func TestDriveMarkdownPreviewerSkipsExecutableBinaryWithoutError(t *testing.T) {
+	root := t.TempDir()
+	binPath := writePreviewFile(t, filepath.Join(root, "bin", "codex-remote"), "mock-binary")
+	if err := os.Chmod(binPath, 0o755); err != nil {
+		t.Fatalf("chmod %s: %v", binPath, err)
+	}
+	previewer := NewDriveMarkdownPreviewer(nil, MarkdownPreviewConfig{
+		ProcessCWD:   root,
+		CacheDir:     filepath.Join(root, "preview-cache"),
+		MaxFileBytes: 1024,
+	})
+	web := &fakeWebPreviewPublisher{baseURL: "https://preview.example/g/shared/?t=token"}
+	previewer.SetWebPreviewPublisher(web)
+
+	result, err := previewer.RewriteFinalBlock(context.Background(), MarkdownPreviewRequest{
+		SurfaceSessionID: "feishu:app-1:user:ou_user",
+		ActorUserID:      "ou_user",
+		WorkspaceRoot:    root,
+		ThreadCWD:        root,
+		Block: render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Final: true,
+			Text:  "See [binary](bin/codex-remote).",
+		},
+	})
+	if err != nil {
+		t.Fatalf("rewrite returned error: %v", err)
+	}
+	if result.Block.Text != "See [binary](bin/codex-remote)." {
+		t.Fatalf("expected executable binary link to remain unchanged, got %q", result.Block.Text)
+	}
+	if len(web.issuedFor) != 0 {
+		t.Fatalf("expected no web preview to be issued for executable binary, got %#v", web.issuedFor)
+	}
+}
+
 func TestDriveMarkdownPreviewerWebPreviewTracksPreviousVersion(t *testing.T) {
 	root := t.TempDir()
 	docPath := writePreviewFile(t, filepath.Join(root, "docs", "note.txt"), "v1\n")

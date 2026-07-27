@@ -1,7 +1,7 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-07-24`
+> Updated: `2026-07-28`
 > Summary: 当前实现同步了 workspace-aware headless 主链与 vscode 主链，并把当前 live 的 backend-aware 可见命令面收口到新的投影；2026-07-24 补充：Feishu 群聊 surface materialize/resume 时会维护一层 room context coordination record，V1 room id 使用 `feishu:chat:<chatID>`，record 保存 `chatID`、参与过的 gateway evidence、surface evidence、room workspace binding 与 reset generation；私聊 surface 不进入 room context。headless workspace claim owner 现在已经从单 `SurfaceSessionID` 扩展为 `surface` / `room` 结构化 owner：同一 room 下多个群 surface 可共享同一个 workspace claim，但 instance/thread claim 仍保持 surface 级独占，不共享会话；room 已绑定后切到其它 workspace 属于 destructive admin action，会在 route/launch 前做安全 blocker 与群管理员校验，成功后 reset 同 room 其它 surface 的 context-bound runtime。2026-07-22 补充：Feishu 群聊入站现在在 materialize surface / record message / queue dispatch 前必须确认消息 @ 当前 bot，未 @ 当前 bot、无 mention 或当前 bot identity 不可用时 fail closed 忽略，不进入 remote surface 状态机。`codex` 继续以 `workspace` 命令族作为主展示壳，`claude` 当前 live 实现也把 `switch_target` 收口到同一套 `/workspace` 父页与 `切换 / 从目录新建 / 从 GIT URL 新建 / 从 Worktree 新建 / 解除接管` 五个入口，`current_work` 继续保留 `/new` 等当前工作动作，`常用工具` 继续收口到 `/history` 与 `/sendfile`；`/list`、`/use`、裸 `/detach` 则退回 hidden + allow 兼容 alias。`send_settings` 则改成 backend 互斥入口：`codex headless` 可见 `/codexprovider`，`claude headless` 可见 `/claudeprofile`，`vscode` 两者都隐藏，且手动输入错误 backend 的命令也会显式拒绝。`/model` 打开参数卡时会 best-effort 发送后台 `model.list` 能力刷新，但该命令不进入 queue/dispatch/pendingRemote，也不改变 route 状态；动态模型目录只作为 instance-scoped cache 服务 Feishu 菜单；Codex/VS Code `/reasoning` 的普通快捷项现在跟随当前模型的动态 `supportedReasoningEfforts`，未知模型或目录不可校验时不再展示全局硬编码档位。Codex prompt dispatch 现在只下发用户显式 reasoning override，空值表示自动；dispatch 前若目录可判定 `model + reasoning` 不兼容，会丢弃该 reasoning override 并发一次节流 runtime notice。thread lifecycle notification 现在是 state-only：`thread/closed` 只标记 notLoaded、不 detach；`thread/deleted` 会把命中 surface 清成 attached-unbound，防止继续路由到旧 thread。`/list` `/use` / target picker / workspace recency 全部只按当前 backend 过滤，且不再因为 surface/instance `ClaudeProfileID` 不同而隐藏 Claude workspace/session 候选；同时工作区一旦确定，`/workspace list` 与 alias `/list` 现在会把 `新建会话` 置顶并默认选中，`/use`、`/useall` 与锁定工作区的恢复 picker 则继续保留 `新建会话` fallback。2026-07-12 的补充是：`mcpServer/elicitation/request` 承载 MCP tool approval 时会按 `_meta.codex_approval_kind=mcp_tool_call` 进入 `mcp_server_elicitation_approval` 语义，仍复用 `G2 PendingRequest` gate 与 `request_respond` transport；飞书端只开放“允许本次 / 本会话允许”，本会话允许会回写 top-level `_meta.persist=session`，`persist=always` 仅提示暂不支持跨会话持久授权。同日补充：`mcpServer/oauth/login -> oauthLogin/completed` 已通过 help-visible、menu-hidden 的 `/mcpoauth <server>` 接入最小主动链路；它不进入 request gate，不做流式卡片，只向发起 surface append 授权链接与最终成功/失败 notice。2026-06-05 的补充是：headless auto-resume 的运行态只在真实恢复目标身份变化时重置 backoff / last notice，标题、更新时间等非目标元数据刷新不会把同一失败 episode 重新刷成新失败；auto-restore 启动的 managed headless 一旦连回，若 exact-thread 接管失败，也会立刻终止本轮 `PendingHeadless`、kill 这次拉起的 headless，并保留持久化恢复目标等待后续 backoff 重试。2026-05-31 的补充是：headless auto-resume 现在把“恢复 episode 的稳定失败根因”与“后续 retry 观测到的派生 busy/not_found 状态”分开记账；provider/profile/runtime 这类启动前失败会保留为本轮恢复的 canonical cause，并且只有在真正恢复成功或 target 改变后才会清空，因此后续 retry 不会再把用户提示改写成误导性的 workspace/thread busy，也不会对同一根因重复刷失败卡。2026-05-01 的新变化是：headless attach/reuse/restart/create/reject 已进一步收口成单一路径，visible 与 compatibility 继续拆层，但所有 consumer 现在都共享同一个 `desired surface contract vs observed instance contract` 解析核。结果是：
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
@@ -360,6 +360,10 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    3. 两者交界只保留显式 handshake：dispatch 在真正 `prompt.send` 前可以请求 recovery 先做 `prompt_dispatch_restart`，但 queue item 与 remote binding 的最终归属仍回到 dispatch core 收口。
    4. 非 turn agent command（当前包括 `/model` 打开时触发的后台 `model.list`）不会调用 `BindPendingRemoteCommand`，也不会建立 `pendingRemote` 或进入 steer trace；其 response 只更新对应能力缓存，不参与 `E2/E3` 执行态。
 2. `E2 Dispatching` 当前只表示“本地 active queue item 已派发，真实 remote turn 还没完成建联”；它并不自动等价于“已有 live turn”。
+   1. prompt-dispatch watchdog 从 wrapper 真正接收 `prompt.send`、且 remote binding 已拿到 `CommandID` 后才开始计时；queue item 提升为 active 本身不启动计时。
+   2. watchdog 只覆盖仍停在 `dispatching`、没有 `turn.started`、没有任何输出的 managed headless；一旦 queue item 进入 `running`，即使正文尚未产生，也不能再切换实例。
+   3. 同一 queue item 最多进入一次 `prompt_dispatch_fallback`。兜底 turn terminal 后，surface 会进入 `prompt_dispatch_primary_restore`，先回收 watchdog instance，再创建标准 managed headless；后续 queued item 要等主链 attach 完成才继续派发。
+   4. daemon 的 kill/start 命令必须先于 Feishu 兜底 notice 发出，避免网关发送超时阻塞关键恢复动作。若主链恢复前无法确认 workspace claim，surface 保持在当前兜底实例继续服务，不进入无出口的 detached/pending 状态。
 3. 对 Claude backend，pre-start remote turn 的 stage-0 关联键当前先用 dispatch `CommandID`，再回退 `Initiator.SurfaceSessionID` 与 thread 信息；Claude translator 也会把 remote-surface initiator 显式带进 turn lifecycle。即使某些早期事件仍带 blank initiator，daemon 也会先把它视为 unknown，再通过 `CommandID` 命中 pending turn 并提升成真实 turn lifecycle；因此 backend/runtime 的早失败与 `start_new` 首条消息都不会再把 surface 永久卡在 `dispatching`。
 3.1. Feishu MCP 发送类工具和 Drive comments 工具当前也消费这套 remote turn 绑定：wrapper 发布 MCP URL 时只附带 caller instance id，daemon 在 tool call 时先按该 instance 查询 `activeRemote`，再查询 `pendingRemote`，并把产物或评论读取上下文绑定到命中的 `SurfaceSessionID`。工具参数里的 legacy `surface_session_id` 不参与路由；如果 caller instance 当前没有 active/pending remote turn，工具会 fail closed，不回退到 workspace surface context。
 4. `/detach` 在 `E2 Dispatching` 下当前分两类处理：
@@ -763,10 +767,12 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 1. `starting` 时不能旁路 attach/use/follow/new。
 2. detached `/use` 触发的 preselected headless，在实例连上后会直接落到目标 thread，不会再进入手工 selecting。
 3. `/mode vscode` 与 `/detach` 都会主动取消当前恢复流程，并回到 detached 态；此外还有启动超时 watchdog。
-4. `PendingHeadless` 当前有三类产品语义：
+4. `PendingHeadless` 当前有五类产品语义：
    1. `Purpose=thread_restore`：显式 `/use` 一个需要后台恢复的 thread，或 auto-restore。
    2. `Purpose=fresh_workspace`：`/workspace new dir` 流程选了一个当前没有可复用实例的目录。
    3. `Purpose=prompt_dispatch_restart`：Claude queue / auto-continue / review apply 在 dispatch 前发现 frozen reasoning 与当前 runtime contract 不一致，需要先 restart 成匹配实例。
+   4. `Purpose=prompt_dispatch_fallback`：标准 managed headless 在真实 `prompt.send` 后始终未建立 turn，由一次性 watchdog instance 接管同一 queue item。
+   5. `Purpose=prompt_dispatch_primary_restore`：一次性 watchdog turn 已结束，surface 等待重新 attach 标准 managed headless；此时后续 queue 不会继续落到 watchdog。
 5. 旧 `/newinstance`、旧 `/killinstance` 当前都不再进入 parser；若实例连上时读到历史兼容残留的 pending headless，只会自动结束并提示改用 `/use` / `/useall`。
 6. 后台 auto-restore 触发的 pending headless 也复用同一个 `G1` gate：
    1. 启动阶段默认静默，不额外发 “headless_starting”。
@@ -774,7 +780,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    3. 若 managed headless 已连回但 exact-thread 接管失败，连接结果会被视为本轮 auto-restore 的 terminal outcome：清掉 `PendingHeadless`，kill 这次拉起的 headless，保留持久化恢复目标，并交给 daemon backoff 后再试。
    4. 失败或超时后只发一条恢复失败 notice，并回到 `R0 Detached`。
 7. `PendingHeadless.AutoRestore=true` 时，手动 `/upgrade latest` 与允许 dev feed 的 flavor（源码 `dev` 与 release `alpha`）下的 `/upgrade dev` 检查结果 prompt 不再因为这条后台恢复占位被判成“当前窗口不空闲”；自动升级提示仍保持保守，不会优先挑这种 surface 弹卡。
-8. `Purpose=prompt_dispatch_restart` 的 attach 完成后不会重走 fresh workspace / exact-thread restore 的大路径；surface 只做最小 reattach，然后由统一 dispatch owner 继续原本那条 queued 或 auto-continue 发送，避免在“切推理强度”时把 queue/runtime 状态清空。
+8. `Purpose=prompt_dispatch_restart`、`Purpose=prompt_dispatch_fallback`、`Purpose=prompt_dispatch_primary_restore` 的 attach 完成后不会重走 fresh workspace / exact-thread restore 的大路径；surface 只做最小 reattach，然后由统一 dispatch owner 继续原本那条 queued 或 auto-continue 发送，避免在恢复通道切换时把 queue/runtime 状态清空。
 
 ### 4.4 选择卡片不再是服务端持久 modal 状态
 
@@ -1260,10 +1266,12 @@ E1 Queued
 
 E2 Dispatching
   -- turn.started(remote_surface) --> E3 Running
+  -- watchdog timeout before turn.started --> PendingHeadless(prompt_dispatch_fallback) --> E2 Dispatching on watchdog
   -- command rejected / dispatch failure --> E0 Idle
 
 E3 Running
   -- turn.completed(remote_surface) --> E0 Idle
+  -- fallback turn terminal --> PendingHeadless(prompt_dispatch_primary_restore) --> standard managed headless attach --> E0/E1
   -- reply 当前 processing source message（文本 / 本地图片，且命中当前 surface active running item） --> `SteerPending` overlay
 
 `CompactPending` overlay
@@ -1853,6 +1861,7 @@ retained-offline overlay 额外规则：
 10. `/reasoning` 是否仍只展示当前模型声明的 Codex reasoning options，unknown/catalog-unavailable 时是否保持自动 + 手输降级，而不是重新暴露全局硬编码列表。
 11. Codex dispatch guard 是否只丢弃“目录已知且明确不兼容”的 reasoning override，并且不误伤 unknown/manual model、Claude launch contract 或 model/access override。
 12. Feishu room workspace 切换是否仍只在真正 destructive workspace change 前触发，且当前 surface blocker、同 room unsafe blocker、管理员校验、sibling reset、最终 binding 写入保持同一顺序；普通同 workspace `/use` / session 选择不能调用管理员 API。
+13. prompt-dispatch watchdog 是否仍从真实 `prompt.send` command bind 开始计时、在 `turn.started` 后立即失效、对同一 queue item 只切一次，并在兜底 turn terminal 后回到标准 managed headless；Feishu notice 失败不能阻塞 daemon kill/start。
 
 ## 11. 待讨论取舍
 

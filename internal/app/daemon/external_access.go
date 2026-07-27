@@ -47,16 +47,20 @@ func externalAccessSettingsViewFromConfig(value config.ExternalAccessSettings) e
 	value = config.ResolveExternalAccessSettings(value)
 	lazyStart := value.Provider.LazyStart == nil || *value.Provider.LazyStart
 	return externalAccessSettingsView{
-		ListenHost:                 strings.TrimSpace(value.ListenHost),
-		ListenPort:                 value.ListenPort,
-		DefaultLinkTTL:             time.Duration(value.DefaultLinkTTLSeconds) * time.Second,
-		DefaultSessionTTL:          time.Duration(value.DefaultSessionTTLSeconds) * time.Second,
-		ProviderKind:               strings.TrimSpace(value.Provider.Kind),
-		ProviderLazyStart:          lazyStart,
-		TryCloudflareBinaryPath:    strings.TrimSpace(value.Provider.TryCloudflare.BinaryPath),
-		TryCloudflareLaunchTimeout: time.Duration(value.Provider.TryCloudflare.LaunchTimeoutSeconds) * time.Second,
-		TryCloudflareMetricsPort:   value.Provider.TryCloudflare.MetricsPort,
-		TryCloudflareLogPath:       strings.TrimSpace(value.Provider.TryCloudflare.LogPath),
+		ListenHost:                  strings.TrimSpace(value.ListenHost),
+		ListenPort:                  value.ListenPort,
+		DefaultLinkTTL:              time.Duration(value.DefaultLinkTTLSeconds) * time.Second,
+		DefaultSessionTTL:           time.Duration(value.DefaultSessionTTLSeconds) * time.Second,
+		ProviderKind:                strings.TrimSpace(value.Provider.Kind),
+		ProviderLazyStart:           lazyStart,
+		TryCloudflareBinaryPath:     strings.TrimSpace(value.Provider.TryCloudflare.BinaryPath),
+		TryCloudflareLaunchTimeout:  time.Duration(value.Provider.TryCloudflare.LaunchTimeoutSeconds) * time.Second,
+		TryCloudflareMetricsPort:    value.Provider.TryCloudflare.MetricsPort,
+		TryCloudflareLogPath:        strings.TrimSpace(value.Provider.TryCloudflare.LogPath),
+		SelfHostedRelayBaseURL:      strings.TrimSpace(value.Provider.SelfHostedRelay.BaseURL),
+		SelfHostedRelayTunnelURL:    strings.TrimSpace(value.Provider.SelfHostedRelay.TunnelURL),
+		SelfHostedRelaySharedSecret: strings.TrimSpace(value.Provider.SelfHostedRelay.SharedSecret),
+		SelfHostedRelayInstanceID:   strings.TrimSpace(value.Provider.SelfHostedRelay.InstanceID),
 	}
 }
 
@@ -80,6 +84,13 @@ func newExternalAccessService(cfg ExternalAccessRuntimeConfig) *externalaccess.S
 			LaunchTimeout: settings.TryCloudflareLaunchTimeout,
 			MetricsPort:   settings.TryCloudflareMetricsPort,
 			LogPath:       settings.TryCloudflareLogPath,
+		})
+	case "selfhostedrelay":
+		provider = externalaccess.NewSelfHostedRelayProvider(externalaccess.SelfHostedRelayOptions{
+			BaseURL:      settings.SelfHostedRelayBaseURL,
+			TunnelURL:    settings.SelfHostedRelayTunnelURL,
+			SharedSecret: settings.SelfHostedRelaySharedSecret,
+			InstanceID:   settings.SelfHostedRelayInstanceID,
 		})
 	default:
 		provider = nil

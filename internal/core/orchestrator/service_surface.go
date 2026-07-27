@@ -131,6 +131,7 @@ func (s *Service) pendingHeadlessActionBlocked(surface *state.SurfaceConsoleReco
 	}
 	switch action.Kind {
 	case control.ActionStatus,
+		control.ActionTasks,
 		control.ActionAutoWhipCommand,
 		control.ActionAutoContinueCommand,
 		control.ActionPlanCommand,

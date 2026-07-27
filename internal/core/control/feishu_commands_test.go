@@ -8,6 +8,16 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
+func TestParseFeishuTextActionRecognizesTasksCommand(t *testing.T) {
+	action, ok := ParseFeishuTextActionWithoutCatalog("/tasks")
+	if !ok {
+		t.Fatal("expected /tasks to be parsed")
+	}
+	if action.Kind != ActionTasks {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionTasks)
+	}
+}
+
 func TestParseFeishuTextActionRecognizesDebugCommand(t *testing.T) {
 	action, ok := ParseFeishuTextActionWithoutCatalog("/debug")
 	if !ok {

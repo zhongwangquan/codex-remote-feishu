@@ -224,6 +224,9 @@ func (s *Service) bindPendingRemoteCommand(surface *state.SurfaceConsoleRecord, 
 		return true
 	}
 	binding.CommandID = commandID
+	if binding.DispatchStartedAt.IsZero() {
+		binding.DispatchStartedAt = s.now().UTC()
+	}
 	return true
 }
 

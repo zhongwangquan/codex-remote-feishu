@@ -1,0 +1,29 @@
+services:
+  preview-relay:
+    build:
+      context: ../..
+      dockerfile: deploy/preview-relay/Dockerfile
+    environment:
+      PREVIEW_RELAY_LISTEN_ADDR: ":8080"
+      PREVIEW_RELAY_SHARED_SECRET: "${PREVIEW_RELAY_SHARED_SECRET}"
+      PREVIEW_RELAY_BASE_PATH: "${PREVIEW_RELAY_BASE_PATH}"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.9
+    depends_on:
+      - preview-relay
+    environment:
+      PREVIEW_DOMAIN: "${PREVIEW_DOMAIN}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

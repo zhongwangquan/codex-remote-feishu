@@ -705,7 +705,7 @@ func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
 		t.Fatalf("expected normal current_work menu to project")
 	}
 	gotNormal := firstCommandTexts(normalCatalog.Sections[0].Entries)
-	wantNormal := []string{"/stop", "/compact", "/steerall", "/new", "/status"}
+	wantNormal := []string{"/stop", "/compact", "/steerall", "/new", "/tasks", "/status"}
 	if fmt.Sprint(gotNormal) != fmt.Sprint(wantNormal) {
 		t.Fatalf("normal current_work commands = %#v, want %#v", gotNormal, wantNormal)
 	}
@@ -717,7 +717,7 @@ func TestCommandCatalogFromViewCurrentWorkHonorsStageVisibility(t *testing.T) {
 		t.Fatalf("expected vscode current_work menu to project")
 	}
 	gotVSCode := firstCommandTexts(vscodeCatalog.Sections[0].Entries)
-	wantVSCode := []string{"/stop", "/compact", "/steerall", "/status"}
+	wantVSCode := []string{"/stop", "/compact", "/steerall", "/tasks", "/status"}
 	if fmt.Sprint(gotVSCode) != fmt.Sprint(wantVSCode) {
 		t.Fatalf("vscode current_work commands = %#v, want %#v", gotVSCode, wantVSCode)
 	}

@@ -296,7 +296,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	if record := s.activeTargetPicker(surface); targetPickerPendingStillRunning(surface, record) {
 		cleanup.PreserveTargetPicker = true
 	}
-	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
+	if headlessLaunchPurposeContinuesPromptDispatch(pending.Purpose) {
 		return s.attachHeadlessPromptDispatchRestart(surface, inst, pending)
 	}
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
@@ -364,6 +364,17 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		},
 	)
 	return events
+}
+
+func headlessLaunchPurposeContinuesPromptDispatch(purpose state.HeadlessLaunchPurpose) bool {
+	switch purpose {
+	case state.HeadlessLaunchPurposePromptDispatchRestart,
+		state.HeadlessLaunchPurposePromptDispatchFallback,
+		state.HeadlessLaunchPurposePromptDispatchPrimaryRestore:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) finishFailedAutoRestoreThreadConnect(surface *state.SurfaceConsoleRecord, pending *state.HeadlessLaunchRecord, events []eventcontract.Event) []eventcontract.Event {

@@ -12,6 +12,7 @@ const (
 	FeishuCommandAdminSubcommand      = "admin_subcommand"
 	FeishuCommandList                 = "list"
 	FeishuCommandStatus               = "status"
+	FeishuCommandTasks                = "tasks"
 	FeishuCommandUse                  = "use"
 	FeishuCommandUseAll               = "useall"
 	FeishuCommandNew                  = "new"
@@ -727,6 +728,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "status", action: Action{Kind: ActionStatus}},
 		},
 	},
+	tasksCommandSpec(),
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandMode,

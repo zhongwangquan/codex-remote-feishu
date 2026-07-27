@@ -489,9 +489,11 @@ const (
 type HeadlessLaunchPurpose string
 
 const (
-	HeadlessLaunchPurposeThreadRestore         HeadlessLaunchPurpose = "thread_restore"
-	HeadlessLaunchPurposeFreshWorkspace        HeadlessLaunchPurpose = "fresh_workspace"
-	HeadlessLaunchPurposePromptDispatchRestart HeadlessLaunchPurpose = "prompt_dispatch_restart"
+	HeadlessLaunchPurposeThreadRestore                HeadlessLaunchPurpose = "thread_restore"
+	HeadlessLaunchPurposeFreshWorkspace               HeadlessLaunchPurpose = "fresh_workspace"
+	HeadlessLaunchPurposePromptDispatchRestart        HeadlessLaunchPurpose = "prompt_dispatch_restart"
+	HeadlessLaunchPurposePromptDispatchFallback       HeadlessLaunchPurpose = "prompt_dispatch_fallback"
+	HeadlessLaunchPurposePromptDispatchPrimaryRestore HeadlessLaunchPurpose = "prompt_dispatch_primary_restore"
 )
 
 type HeadlessLaunchRecord struct {
@@ -666,6 +668,7 @@ type QueueItemRecord struct {
 	FrozenOverride     ModelConfigRecord
 	FrozenPlanMode     PlanModeSetting
 	RouteModeAtEnqueue RouteMode
+	PromptFallback     bool
 	Status             QueueItemStatus
 }
 

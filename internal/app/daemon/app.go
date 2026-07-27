@@ -53,16 +53,20 @@ type ExternalAccessRuntimeConfig struct {
 }
 
 type externalAccessSettingsView struct {
-	ListenHost                 string
-	ListenPort                 int
-	DefaultLinkTTL             time.Duration
-	DefaultSessionTTL          time.Duration
-	ProviderKind               string
-	ProviderLazyStart          bool
-	TryCloudflareBinaryPath    string
-	TryCloudflareLaunchTimeout time.Duration
-	TryCloudflareMetricsPort   int
-	TryCloudflareLogPath       string
+	ListenHost                  string
+	ListenPort                  int
+	DefaultLinkTTL              time.Duration
+	DefaultSessionTTL           time.Duration
+	ProviderKind                string
+	ProviderLazyStart           bool
+	TryCloudflareBinaryPath     string
+	TryCloudflareLaunchTimeout  time.Duration
+	TryCloudflareMetricsPort    int
+	TryCloudflareLogPath        string
+	SelfHostedRelayBaseURL      string
+	SelfHostedRelayTunnelURL    string
+	SelfHostedRelaySharedSecret string
+	SelfHostedRelayInstanceID   string
 }
 
 type pendingThreadHistoryRead struct {

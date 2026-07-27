@@ -184,6 +184,7 @@ func buildFeishuRecoveryEntries() []CommandCatalogEntry {
 	return []CommandCatalogEntry{
 		buildFeishuRecoveryEntry(FeishuCommandList),
 		buildFeishuRecoveryEntry(FeishuCommandUse),
+		buildFeishuRecoveryEntry(FeishuCommandTasks),
 		buildFeishuRecoveryEntry(FeishuCommandStatus),
 	}
 }

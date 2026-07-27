@@ -676,6 +676,13 @@ func (h markdownFilePreviewHandler) Plan(_ context.Context, req FinalBlockPrevie
 	if !supported {
 		return nil, false, nil
 	}
+	info, err := os.Stat(resolvedPath)
+	if err != nil {
+		return nil, true, fmt.Errorf("stat preview source %s: %w", resolvedPath, err)
+	}
+	if shouldSkipPreviewSource(info, artifactKind, h.previewer.config.MaxFileBytes) {
+		return nil, false, nil
+	}
 
 	content, err := os.ReadFile(resolvedPath)
 	if err != nil {
@@ -713,6 +720,22 @@ func (h markdownFilePreviewHandler) Plan(_ context.Context, req FinalBlockPrevie
 		},
 		Deliveries: deliveries,
 	}, true, nil
+}
+
+func shouldSkipPreviewSource(info os.FileInfo, artifactKind string, maxFileBytes int64) bool {
+	if info == nil {
+		return false
+	}
+	if !info.Mode().IsRegular() {
+		return true
+	}
+	if maxFileBytes > 0 && info.Size() > maxFileBytes {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(artifactKind), "binary") && info.Mode().Perm()&0o111 != 0 {
+		return true
+	}
+	return false
 }
 
 type driveMarkdownLinkPublisher struct {
@@ -938,43 +961,4 @@ func (p *DriveMarkdownPreviewer) ensureRootFolder(ctx context.Context, runtime *
 	}
 	root, _ := value.(*previewFolderRecord)
 	return root, nil
-}
-
-func (p *DriveMarkdownPreviewer) resolvePreviewPath(rawTarget string, req MarkdownPreviewRequest) (string, bool, error) {
-	target, ok := normalizePreviewReferenceTarget(rawTarget)
-	if !ok {
-		return "", false, nil
-	}
-
-	cleanTarget, _, _ := splitPreviewLocationSuffix(target)
-	if _, _, ok := previewArtifactMetadata(cleanTarget); !ok {
-		return "", false, nil
-	}
-
-	roots := previewAllowedRoots(req.ThreadCWD, req.WorkspaceRoot, p.config.ProcessCWD)
-	candidates := previewPathCandidates(cleanTarget, roots)
-	for _, candidate := range candidates {
-		resolved, err := previewCanonicalPath(candidate)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return "", true, err
-		}
-		if !previewPathWithinAnyRoot(resolved, roots) {
-			continue
-		}
-		info, err := os.Stat(resolved)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return "", true, err
-		}
-		if info.IsDir() {
-			continue
-		}
-		return resolved, true, nil
-	}
-	return "", false, nil
 }

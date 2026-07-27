@@ -1,0 +1,3 @@
+{$PREVIEW_DOMAIN} {
+  reverse_proxy preview-relay:8080
+}

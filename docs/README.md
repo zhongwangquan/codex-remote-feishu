@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-07-17`
-> Summary: 同步 WebSetup/Admin 飞书接入文档 SSOT 归档后的索引。
+> Updated: `2026-07-28`
+> Summary: 补充已落地的自托管预览中继文档索引。
 
 ## 1. 适用范围
 
@@ -147,6 +147,7 @@
 - [non-linux-user-autostart-design.md](./implemented/non-linux-user-autostart-design.md)
 - [relay-backpressure-hardening-design.md](./implemented/relay-backpressure-hardening-design.md)
 - [shared-exploration-progress-card-design.md](./implemented/shared-exploration-progress-card-design.md)
+- [self-hosted-preview-relay.md](./implemented/self-hosted-preview-relay.md)
 - [authenticated-external-access-foundation-design.md](./implemented/authenticated-external-access-foundation-design.md)
 - [cross-layer-event-contract-redesign.md](./implemented/cross-layer-event-contract-redesign.md)
 - [thread-description-unification-plan.md](./implemented/thread-description-unification-plan.md)

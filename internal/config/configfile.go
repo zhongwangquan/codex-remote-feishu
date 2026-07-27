@@ -89,9 +89,10 @@ type ExternalAccessSettings struct {
 }
 
 type ExternalAccessProviderSettings struct {
-	Kind          string                `json:"kind,omitempty"`
-	LazyStart     *bool                 `json:"lazyStart,omitempty"`
-	TryCloudflare TryCloudflareSettings `json:"tryCloudflare,omitempty"`
+	Kind            string                  `json:"kind,omitempty"`
+	LazyStart       *bool                   `json:"lazyStart,omitempty"`
+	TryCloudflare   TryCloudflareSettings   `json:"tryCloudflare,omitempty"`
+	SelfHostedRelay SelfHostedRelaySettings `json:"selfHostedRelay,omitempty"`
 }
 
 type TryCloudflareSettings struct {
@@ -99,6 +100,13 @@ type TryCloudflareSettings struct {
 	LaunchTimeoutSeconds int    `json:"launchTimeoutSeconds,omitempty"`
 	MetricsPort          int    `json:"metricsPort,omitempty"`
 	LogPath              string `json:"logPath,omitempty"`
+}
+
+type SelfHostedRelaySettings struct {
+	BaseURL      string `json:"baseURL,omitempty"`
+	TunnelURL    string `json:"tunnelURL,omitempty"`
+	SharedSecret string `json:"sharedSecret,omitempty"`
+	InstanceID   string `json:"instanceID,omitempty"`
 }
 
 type WrapperSettings struct {

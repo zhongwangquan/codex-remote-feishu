@@ -14,12 +14,13 @@ import (
 )
 
 type Config struct {
-	TurnHandoffWait     time.Duration
-	HeadlessLaunchWait  time.Duration
-	LocalPauseMaxWait   time.Duration
-	DetachAbandonWait   time.Duration
-	GitAvailable        bool
-	ChatAdminAuthorizer ChatAdminAuthorizer
+	TurnHandoffWait            time.Duration
+	HeadlessLaunchWait         time.Duration
+	LocalPauseMaxWait          time.Duration
+	DetachAbandonWait          time.Duration
+	PromptDispatchWatchdogWait time.Duration
+	GitAvailable               bool
+	ChatAdminAuthorizer        ChatAdminAuthorizer
 }
 
 type ChatAdminAuthorizer interface {
@@ -102,6 +103,7 @@ type remoteTurnBinding struct {
 	DurableThreadReady    bool
 	TurnID                string
 	Status                string
+	DispatchStartedAt     time.Time
 	StartedAt             time.Time
 	InterruptRequested    bool
 	InterruptRequestedAt  time.Time
@@ -220,6 +222,9 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 	if cfg.DetachAbandonWait <= 0 {
 		cfg.DetachAbandonWait = 20 * time.Second
 	}
+	if cfg.PromptDispatchWatchdogWait <= 0 {
+		cfg.PromptDispatchWatchdogWait = 20 * time.Second
+	}
 	if planner == nil {
 		planner = renderer.NewPlanner()
 	}
@@ -295,6 +300,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		switch action.Kind {
 		case control.ActionStatus:
 			return s.filterEventsForSurfaceVisibility([]eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}})
+		case control.ActionTasks:
+			return s.filterEventsForSurfaceVisibility([]eventcontract.Event{s.tasksTerminalPageEvent(surface)})
 		case control.ActionAutoWhipCommand:
 			return s.filterEventsForSurfaceVisibility(s.handleAutoWhipCommand(surface, action))
 		case control.ActionAutoContinueCommand:
@@ -467,6 +474,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	case control.ActionStatus:
 		s.markCommandLauncherTerminal(surface)
 		events = []eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}}
+	case control.ActionTasks:
+		events = []eventcontract.Event{s.tasksTerminalPageEvent(surface)}
 	case control.ActionDetach:
 		events = s.detach(surface)
 	default:
@@ -804,7 +813,11 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		events = append(events, s.detourReturnNoticeEvent(outcome)...)
 		if remoteSurface != nil {
 			events = append(events, s.finishSurfaceAfterWork(remoteSurface)...)
-			events = append(events, s.dispatchNext(remoteSurface)...)
+			restoreEvents, restoring := s.restorePrimaryAfterPromptDispatchFallback(outcome)
+			events = append(events, restoreEvents...)
+			if !restoring {
+				events = append(events, s.dispatchNext(remoteSurface)...)
+			}
 		}
 		events = append(events, compactEvents...)
 		return s.filterEventsForSurfaceVisibility(events)
@@ -963,6 +976,7 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		}
 		events = append(events, s.maybeDispatchPendingAutoWhip(surface, now)...)
 		events = append(events, s.maybeDispatchPendingAutoContinue(surface, now)...)
+		events = append(events, s.maybeFallbackPromptDispatch(surface, now)...)
 		events = append(events, s.tickExecCommandProgressReasoning(surface, now)...)
 	}
 	return s.filterEventsForSurfaceVisibility(events)

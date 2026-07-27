@@ -11,6 +11,7 @@ type ActionKind string
 const (
 	ActionListInstances               ActionKind = "surface.menu.list_instances"
 	ActionStatus                      ActionKind = "surface.menu.status"
+	ActionTasks                       ActionKind = "surface.menu.tasks"
 	ActionStop                        ActionKind = "surface.menu.stop"
 	ActionCompact                     ActionKind = "surface.menu.compact"
 	ActionSteerAll                    ActionKind = "surface.menu.steer_all"
