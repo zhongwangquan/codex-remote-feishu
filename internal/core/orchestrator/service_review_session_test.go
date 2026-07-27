@@ -175,13 +175,7 @@ func TestReviewSessionTextRoutesToReviewThreadAndKeepsSelection(t *testing.T) {
 		Text:             "这里需要再看一下边界情况",
 	})
 
-	if len(events) != 3 {
-		t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
-	}
-	if events[2].Command == nil || events[2].Command.Kind != agentproto.CommandPromptSend {
-		t.Fatalf("expected prompt send command, got %#v", events)
-	}
-	command := events[2].Command
+	command := promptSendCommandFromEvents(t, events)
 	if command.Target.ThreadID != "thread-review" ||
 		command.Target.ExecutionMode != agentproto.PromptExecutionModeResumeExisting ||
 		command.Target.SourceThreadID != "thread-main" ||
@@ -223,10 +217,7 @@ func TestReviewSessionTextRecoversReviewThreadSelection(t *testing.T) {
 		Text:             "这里需要继续审阅",
 	})
 
-	if len(events) != 3 || events[2].Command == nil {
-		t.Fatalf("expected review session command after recovery, got %#v", events)
-	}
-	command := events[2].Command
+	command := promptSendCommandFromEvents(t, events)
 	if command.Target.ThreadID != "thread-review" ||
 		command.Target.SourceThreadID != "thread-main" ||
 		command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
@@ -278,10 +269,7 @@ func TestReviewSessionFinalRenderDoesNotStealSelection(t *testing.T) {
 		MessageID:        "msg-review-2",
 		Text:             "再按这个方向检查一遍",
 	})
-	if len(replyEvents) != 3 || replyEvents[2].Command == nil {
-		t.Fatalf("expected follow-up review prompt command, got %#v", replyEvents)
-	}
-	command := replyEvents[2].Command
+	command := promptSendCommandFromEvents(t, replyEvents)
 	if command.Target.ThreadID != "thread-review" ||
 		command.Target.SourceThreadID != "thread-main" ||
 		command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
@@ -324,13 +312,7 @@ func TestNewThreadExitsIdleReviewSessionBeforeFirstText(t *testing.T) {
 		Text:             "你好",
 	})
 
-	if len(events) != 3 {
-		t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
-	}
-	command := events[2].Command
-	if command == nil || command.Kind != agentproto.CommandPromptSend {
-		t.Fatalf("expected prompt send command, got %#v", events)
-	}
+	command := promptSendCommandFromEvents(t, events)
 	if command.Target.ThreadID != "" ||
 		command.Target.ExecutionMode != agentproto.PromptExecutionModeStartNew ||
 		!command.Target.CreateThreadIfMissing ||
@@ -475,10 +457,7 @@ func TestReviewSessionLifecycleActivatesPendingSessionWithoutRemoteTurnOwnership
 		MessageID:        "msg-review-2",
 		Text:             "这里继续看一下",
 	})
-	if len(replyEvents) != 3 || replyEvents[2].Command == nil {
-		t.Fatalf("expected review reply command after lifecycle activation, got %#v", replyEvents)
-	}
-	command := replyEvents[2].Command
+	command := promptSendCommandFromEvents(t, replyEvents)
 	if command.Target.ThreadID != "thread-review" ||
 		command.Target.SourceThreadID != "thread-main" ||
 		command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {

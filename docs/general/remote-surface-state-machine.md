@@ -370,6 +370,10 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    1. 若仍是 pre-start dispatch（`pendingRemote` 还没有 `TurnID`、没有 output、active item 仍是 `dispatching`），会立即把 active item 标成 failed、清掉 pending remote ownership，并直接 detach。
    2. 只有已经存在真实 started remote turn、或 compact/steer 等仍需等待的 live work 时，才会进入 `E6 Abandoning`。
 5. `E6 Abandoning` 现在只覆盖“确实还有 live work 在收尾”的场景，不再把 pre-start dispatching 残留也一并塞进 watchdog-only 等待路径。
+6. 用户输入的 queue reaction 只投影稳定可见状态，不再暴露同一 reducer 内的瞬时 enqueue：
+   1. 新 item 在同一次 `enqueuePreparedQueueItem(...) -> dispatchNext(...)` 中直接进入 `dispatching` 时，不发 `QueueOn(OneSecond)`，只由 dispatch 事件进入 `TypingOn(THINKING)`。
+   2. 新 item 在 `dispatchNext(...)` 后仍保持 `queued` 时，才发 `QueueOn(OneSecond)`；后续真正出队时继续发 `QueueOff + TypingOn`。
+   3. 这不改变 `E1/E2` 的 core carrier 与 dispatch ownership，只避免把不可交互的瞬时中间态变成两次飞书 reaction 更新。
 
 ### 3.4 审阅态 overlay
 

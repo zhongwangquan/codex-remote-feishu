@@ -97,6 +97,31 @@ This change covers all external-access URLs issued by the daemon through:
 
 Those URLs now resolve under your own relay domain instead of `*.trycloudflare.com`.
 
+For a path-prefixed deployment, grant exchange redirects and session-cookie
+paths must keep the full public prefix:
+
+```text
+/codex-preview/t/<instance-id>/g/<grant-id>/...
+```
+
+Both tunnel endpoints now apply the `/g/...` response rewrite
+idempotently. The local provider rewrites before sending the response through
+the websocket, and the public relay repeats the same check before replying to
+the browser. This prevents a mixed-version deployment from redirecting the
+browser to the domain root, where an unrelated application may return a 404.
+
+## Preview Formats
+
+The browser preview renderer currently handles:
+
+- inline image: PNG, JPG/JPEG, GIF, WebP, BMP
+- safe source view: SVG (not executed as a same-origin document)
+- inline document: PDF
+- rendered/source text views: Markdown, HTML source, and common text/code files
+
+Unsupported or browser-incompatible binary formats fall back to download
+instead of being rendered as active content.
+
 ## Current Limit
 
 This relay currently proxies normal HTTP requests. Websocket upgrade relay is not enabled yet. If a future external-access flow requires websocket passthrough, add it on top of the same tunnel protocol.

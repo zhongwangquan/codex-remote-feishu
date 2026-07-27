@@ -68,6 +68,15 @@ func TestDriveMarkdownPreviewerServesImageAndPDFInsidePreviewShell(t *testing.T)
 		t.Fatalf("expected image preview shell, got %q", imageRec.Body.String())
 	}
 
+	_, bmpPreviewID := publishWebPreviewArtifactForTest(t, previewer, filepath.Join(root, "docs", "shot.bmp"), []byte{'B', 'M', 0, 0}, time.Date(2026, 4, 15, 11, 0, 30, 0, time.UTC))
+	bmpRec := httptest.NewRecorder()
+	if ok := previewer.ServeWebPreview(bmpRec, httptest.NewRequest(http.MethodGet, "/preview/s/"+testPreviewScopePublicID+"/"+bmpPreviewID, nil), testPreviewScopePublicID, bmpPreviewID, false); !ok {
+		t.Fatal("expected bmp preview to be served")
+	}
+	if !strings.Contains(bmpRec.Body.String(), `<img class="preview-image" src="`+bmpPreviewID+`/download?inline=1"`) {
+		t.Fatalf("expected bmp image preview shell, got %q", bmpRec.Body.String())
+	}
+
 	_, pdfPreviewID := publishWebPreviewArtifactForTest(t, previewer, filepath.Join(root, "docs", "design.pdf"), []byte("%PDF-1.4\n"), time.Date(2026, 4, 15, 11, 1, 0, 0, time.UTC))
 	pdfRec := httptest.NewRecorder()
 	if ok := previewer.ServeWebPreview(pdfRec, httptest.NewRequest(http.MethodGet, "/preview/s/"+testPreviewScopePublicID+"/"+pdfPreviewID, nil), testPreviewScopePublicID, pdfPreviewID, false); !ok {

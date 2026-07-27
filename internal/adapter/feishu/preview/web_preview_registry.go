@@ -102,7 +102,7 @@ func previewRendererKind(path, artifactKind, mimeType string) string {
 		return "html_source"
 	case ".svg":
 		return "svg_source"
-	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp":
 		return "image"
 	case ".pdf":
 		return "pdf"

@@ -1968,10 +1968,8 @@ func TestDigitsTextAfterShowingThreadsIsSentAsNormalMessage(t *testing.T) {
 		Text:             "1",
 	})
 
-	if len(events) != 3 || events[0].PendingInput == nil || events[1].PendingInput == nil || events[2].Command == nil {
-		t.Fatalf("expected normal queued message flow, got %#v", events)
-	}
-	if events[2].Command.Kind != agentproto.CommandPromptSend || events[2].Command.Prompt.Inputs[0].Text != "1" {
-		t.Fatalf("expected digits to be sent as normal text, got %#v", events[2].Command)
+	command := promptSendCommandFromEvents(t, events)
+	if command.Prompt.Inputs[0].Text != "1" {
+		t.Fatalf("expected digits to be sent as normal text, got %#v", command)
 	}
 }

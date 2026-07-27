@@ -57,13 +57,7 @@ func TestTextDetourForkEnqueuesForkEphemeralAndStripsTriggerText(t *testing.T) {
 		Text:             "[什么？] 顺手问个岔题",
 	})
 
-	if len(events) != 3 {
-		t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
-	}
-	if events[2].Command == nil || events[2].Command.Kind != agentproto.CommandPromptSend {
-		t.Fatalf("expected prompt send command, got %#v", events)
-	}
-	command := events[2].Command
+	command := promptSendCommandFromEvents(t, events)
 	if command.Target.ExecutionMode != agentproto.PromptExecutionModeForkEphemeral ||
 		command.Target.SourceThreadID != "thread-main" ||
 		command.Target.ThreadID != "" ||
@@ -94,13 +88,7 @@ func TestTextDetourBlankWorksWhileSurfaceUnbound(t *testing.T) {
 		Text:             "[耸肩摊手] 临时问一句",
 	})
 
-	if len(events) != 3 {
-		t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
-	}
-	if events[2].Command == nil {
-		t.Fatalf("expected prompt send command, got %#v", events)
-	}
-	command := events[2].Command
+	command := promptSendCommandFromEvents(t, events)
 	if command.Target.ExecutionMode != agentproto.PromptExecutionModeStartEphemeral ||
 		command.Target.SourceThreadID != "" ||
 		command.Target.ThreadID != "" ||

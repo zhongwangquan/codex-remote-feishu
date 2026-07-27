@@ -1,7 +1,7 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-07-17`
+> Updated: `2026-07-28`
 > Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；`/workspace list` 与 alias `/list` 在工作区已确定后也会把 `新建会话` 作为合法 session 选项，并默认选中它；bare `/model` 的下拉候选现在只来自当前 Codex instance 的动态 `model/list` 缓存，无缓存/旧 app-server/刷新失败时只保留手动输入；Codex/VS Code 下 bare `/reasoning` 现在以当前模型的动态 `supportedReasoningEfforts` 投影快捷项，目录不可校验时只保留自动并给出说明，不再展示全局硬编码推理档位；显式表单提交家族仍保持各自既有 submit 语义；`mcpServer/elicitation/request` 承载 MCP tool approval 时会归一成 `mcp_server_elicitation_approval`，飞书卡只开放本次/本会话授权，`persist=always` 仅提示暂不支持跨会话持久允许；`/mcpoauth <server>` 当前只发起 MCP OAuth RPC lifecycle，并用 append-only notice 展示授权链接与完成/失败结果，不进入 request card 或菜单 owner-flow。
 
 ## 1. 文档定位
@@ -687,6 +687,18 @@ MCP request 卡片当前新增的可视语义：
   - 可见性当前分两层：`file_change` / `mcp_tool_call` / `context_compaction` 在 normal / verbose 可见，quiet 静默；`exec_command` / `web_search` / `dynamic_tool_call` 以及 exploration / reasoning timeline 行仍只在 verbose 可见。normal 继续保留 plan、final reply，以及会影响当前状态的共享过程项；若 compact 完成发生在无 attached surface 时，replay 到 normal / verbose surface 会继续显示，quiet 仍保持静默
   - 一旦 assistant 正文真正 flush 成可见块，orchestrator 会终结这张进度卡的生命周期，后续不再继续 patch，避免“正文已出现但进度卡还在跳”的并发偏移
 
+### 5.3.1 Pending input reaction 边界
+
+pending input 不是卡片 owner-flow，但它会直接改变用户消息上的 reaction，因此也属于前台 UI 状态机的一部分。
+
+当前规则：
+
+1. 普通用户输入在同一次 reducer 调用里直接从 enqueue 进入 dispatch 时，不再投影瞬时 `QueueOn`；前台直接进入 `TypingOn(THINKING)`。
+2. 只有 queue item 在本轮 `dispatchNext(...)` 后仍保持 `queued`，才投影 `QueueOn(OneSecond)`。
+3. 真正排队的 item 后续开始 dispatch 时，继续投影 `QueueOff(OneSecond) + TypingOn(THINKING)`。
+4. 这只收口 reaction 可见性，不改变 `QueuedQueueItemIDs / ActiveQueueItemID / pendingRemote` 的状态归属；立即派发仍从 core 的 queued carrier 同步推进到 dispatching。
+5. completion / failure / discard / steer 的既有 `TypingOff`、`QueueOff` 与 thumbs reaction 语义保持不变。
+
 ### 5.4 当前保留的独立例外
 
 当前仍有几类语义明确、但不应强行并回普通前台卡/notice 主路径的保留例外：
@@ -986,6 +998,7 @@ MCP request 卡片当前新增的可视语义：
 8. request prompt / selection prompt / path picker / target picker 是否把产品状态机职责偷渡进 Feishu UI 层
 9. `/history` 的 owner-card runtime 与 history 业务态是否仍保持单一真相源，而不是重新长回两套 owner lifecycle
 10. route / attach 上下文变化后，workspace page / target picker / path picker / history / review picker 这类旧卡是否仍会留下“看似可点、第一次点才报过期”的假活状态
+11. 普通输入立即派发时是否错误地重新投影 `QueueOn` 造成 `OneSecond -> THINKING` 闪动；真正等待队列的输入是否仍保留 `QueueOn`
 
 ## 待讨论取舍
 

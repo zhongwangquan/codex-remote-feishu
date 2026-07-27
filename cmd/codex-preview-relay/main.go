@@ -231,48 +231,8 @@ func writeRelayResponse(w http.ResponseWriter, response *externalaccess.TunnelRe
 }
 
 func rewriteExternalAccessHeaders(response *externalaccess.TunnelResponseAlias, basePath, instanceID string) {
-	if response == nil || len(response.Headers) == 0 {
-		return
-	}
 	externalPrefix := joinPublicPath(basePath, "/t/"+instanceID)
-	for key, values := range response.Headers {
-		switch strings.ToLower(strings.TrimSpace(key)) {
-		case "location":
-			rewritten := make([]string, 0, len(values))
-			for _, value := range values {
-				rewritten = append(rewritten, rewriteExternalLocation(value, externalPrefix))
-			}
-			response.Headers[key] = rewritten
-		case "set-cookie":
-			rewritten := make([]string, 0, len(values))
-			for _, value := range values {
-				rewritten = append(rewritten, rewriteSetCookiePath(value, externalPrefix))
-			}
-			response.Headers[key] = rewritten
-		}
-	}
-}
-
-func rewriteExternalLocation(value, externalPrefix string) string {
-	value = strings.TrimSpace(value)
-	if !strings.HasPrefix(value, "/g/") {
-		return value
-	}
-	return strings.TrimRight(externalPrefix, "/") + value
-}
-
-func rewriteSetCookiePath(value, externalPrefix string) string {
-	req, _ := http.NewRequest(http.MethodGet, "http://relay.local/", nil)
-	req.Header.Add("Cookie", value)
-	parsed := (&http.Response{Header: http.Header{"Set-Cookie": {value}}, Request: req}).Cookies()
-	if len(parsed) == 0 || parsed[0] == nil {
-		return value
-	}
-	cookie := parsed[0]
-	if strings.HasPrefix(cookie.Path, "/g/") {
-		cookie.Path = strings.TrimRight(externalPrefix, "/") + cookie.Path
-	}
-	return cookie.String()
+	externalaccess.RewriteTunnelResponsePublicPath(response, externalPrefix)
 }
 
 func splitRelayPath(basePath, rawPath string) (string, string, bool) {

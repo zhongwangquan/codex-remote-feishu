@@ -157,14 +157,17 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 	if front {
 		position = 1
 	}
-	var events []eventcontract.Event
-	events = append(events, s.pendingInputEvents(surface, control.PendingInputState{
+	queueEvents := s.pendingInputEvents(surface, control.PendingInputState{
 		QueueItemID:   item.ID,
 		Status:        string(item.Status),
 		QueuePosition: position,
 		QueueOn:       true,
-	}, queueItemSourceMessageIDs(item))...)
-	return append(events, s.dispatchNext(surface)...)
+	}, queueItemSourceMessageIDs(item))
+	dispatchEvents := s.dispatchNext(surface)
+	if item.Status != state.QueueItemQueued {
+		return dispatchEvents
+	}
+	return append(queueEvents, dispatchEvents...)
 }
 
 func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord, actorUserID string) ([]agentproto.Input, []string, string) {

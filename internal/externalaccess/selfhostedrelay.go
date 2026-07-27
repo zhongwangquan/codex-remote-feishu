@@ -170,6 +170,7 @@ func (p *SelfHostedRelayProvider) runOnce(ctx context.Context, localListenerURL 
 			return http.ErrUseLastResponse
 		},
 	}
+	publicPathPrefix := selfHostedRelayPublicPath(p.baseURL, p.instanceID)
 	for {
 		select {
 		case <-ctx.Done():
@@ -184,6 +185,7 @@ func (p *SelfHostedRelayProvider) runOnce(ctx context.Context, localListenerURL 
 			continue
 		}
 		response := handleRelayRequest(client, localListenerURL, envelope.Request)
+		RewriteTunnelResponsePublicPath(response, publicPathPrefix)
 		if err := conn.WriteJSON(tunnelEnvelope{Type: "response", Response: response}); err != nil {
 			return fmt.Errorf("write relay response: %w", err)
 		}
@@ -294,6 +296,14 @@ func deriveTunnelURL(baseURL string) string {
 	parsed.Path = joinRelayURLPath(parsed.Path, "/ws/tunnel")
 	parsed.RawQuery = ""
 	return parsed.String()
+}
+
+func selfHostedRelayPublicPath(baseURL, instanceID string) string {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return ""
+	}
+	return joinRelayURLPath(parsed.Path, "/t/"+strings.TrimSpace(instanceID))
 }
 
 func (p *SelfHostedRelayProvider) recordError(err error) {
