@@ -27,11 +27,13 @@ const (
 
 type SQLiteThreadCatalogOptions struct {
 	Logf func(string, ...any)
+	Now  func() time.Time
 }
 
 type SQLiteThreadCatalog struct {
 	path string
 	logf func(string, ...any)
+	now  func() time.Time
 }
 
 func NewDefaultSQLiteThreadCatalog(opts SQLiteThreadCatalogOptions) (*SQLiteThreadCatalog, error) {
@@ -65,9 +67,14 @@ func NewSQLiteThreadCatalog(path string, opts SQLiteThreadCatalogOptions) *SQLit
 	if logf == nil {
 		logf = log.Printf
 	}
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
 	return &SQLiteThreadCatalog{
 		path: strings.TrimSpace(path),
 		logf: logf,
+		now:  now,
 	}
 }
 

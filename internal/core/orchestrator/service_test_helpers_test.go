@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
@@ -195,9 +196,24 @@ type fakePersistedThreadCatalog struct {
 	workspacesByBackend map[agentproto.Backend]map[string]time.Time
 	byID                map[string]state.ThreadRecord
 	byIDByBackend       map[agentproto.Backend]map[string]state.ThreadRecord
+	working             []threadcatalogcontract.WorkingTaskRecord
 	recentErr           error
 	recentWorkspacesErr error
 	byIDErr             error
+	workingErr          error
+}
+
+func (f *fakePersistedThreadCatalog) WorkingTasks(limit int) ([]threadcatalogcontract.WorkingTaskRecord, error) {
+	if f == nil {
+		return nil, nil
+	}
+	if f.workingErr != nil {
+		return nil, f.workingErr
+	}
+	if limit <= 0 || limit >= len(f.working) {
+		return append([]threadcatalogcontract.WorkingTaskRecord(nil), f.working...), nil
+	}
+	return append([]threadcatalogcontract.WorkingTaskRecord(nil), f.working[:limit]...), nil
 }
 
 func (f *fakePersistedThreadCatalog) RecentThreads(limit int) ([]state.ThreadRecord, error) {

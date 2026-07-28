@@ -9,15 +9,29 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/threadtitle"
 )
 
-const workingTaskCardMaxTasks = 50
+const (
+	workingTaskCardMaxTasks = 50
+	workingTaskCatalogLimit = 200
+)
+
+type workingTaskOrigin string
+
+const (
+	workingTaskOriginFeishu       workingTaskOrigin = "feishu"
+	workingTaskOriginCodexDesktop workingTaskOrigin = "codex_desktop"
+	workingTaskOriginCodexCLI     workingTaskOrigin = "codex_cli"
+	workingTaskOriginMultica      workingTaskOrigin = "multica"
+)
 
 type workingTaskSummary struct {
 	WorkspaceKey string
 	TaskKey      string
 	TaskTitle    string
+	Origin       workingTaskOrigin
 	Status       state.QueueItemStatus
 	QueueOrder   int
 }
@@ -50,7 +64,7 @@ func (s *Service) tasksTerminalPageEvent(surface *state.SurfaceConsoleRecord, ac
 			for _, task := range group.Tasks {
 				lines = append(lines,
 					"• "+firstNonEmpty(strings.TrimSpace(task.TaskTitle), "未命名任务"),
-					"  状态："+workingTaskStatusLabel(task.Status, task.QueueOrder),
+					"  来源："+workingTaskOriginLabel(task.Origin)+" · 状态："+workingTaskStatusLabel(task.Status, task.QueueOrder),
 				)
 			}
 			sections = append(sections, control.FeishuCardTextSection{
@@ -99,6 +113,7 @@ func (s *Service) workingTaskSummaries() []workingTaskSummary {
 				WorkspaceKey: workspaceKey,
 				TaskKey:      workingTaskKey(item),
 				TaskTitle:    s.workingTaskTitle(surface, item),
+				Origin:       workingTaskOriginFeishu,
 				Status:       item.Status,
 			})
 		}
@@ -111,10 +126,26 @@ func (s *Service) workingTaskSummaries() []workingTaskSummary {
 				WorkspaceKey: workspaceKey,
 				TaskKey:      workingTaskKey(item),
 				TaskTitle:    s.workingTaskTitle(surface, item),
+				Origin:       workingTaskOriginFeishu,
 				Status:       state.QueueItemQueued,
 				QueueOrder:   index + 1,
 			})
 		}
+	}
+	for _, persisted := range s.catalog.workingTasks(workingTaskCatalogLimit) {
+		thread := persisted.Thread
+		workspaceKey := firstNonEmpty(
+			strings.TrimSpace(thread.WorkspaceKey),
+			state.ResolveWorkspaceKey(thread.CWD),
+			"未关联工作区",
+		)
+		tasks = append(tasks, workingTaskSummary{
+			WorkspaceKey: workspaceKey,
+			TaskKey:      strings.TrimSpace(thread.ThreadID),
+			TaskTitle:    threadtitle.DisplayBody(&thread, threadtitle.DefaultDisplayLimit),
+			Origin:       workingTaskPersistedOrigin(persisted.Source),
+			Status:       state.QueueItemRunning,
+		})
 	}
 	sort.SliceStable(tasks, func(i, j int) bool {
 		if tasks[i].WorkspaceKey != tasks[j].WorkspaceKey {
@@ -160,7 +191,7 @@ func (s *Service) workingTaskTitle(surface *state.SurfaceConsoleRecord, item *st
 	return firstNonEmpty(
 		previewSnippet(item.SourceMessagePreview),
 		previewSnippet(item.ReplyToMessagePreview),
-		workingTaskSourceLabel(item.SourceKind),
+		workingTaskFallbackTitle(item.SourceKind),
 	)
 }
 
@@ -203,7 +234,7 @@ func groupWorkingTaskSummaries(tasks []workingTaskSummary) []workingTaskWorkspac
 	return groups
 }
 
-func workingTaskSourceLabel(kind state.QueueItemSourceKind) string {
+func workingTaskFallbackTitle(kind state.QueueItemSourceKind) string {
 	switch kind {
 	case state.QueueItemSourceAutoWhip:
 		return "AutoWhip 自动任务"
@@ -211,6 +242,30 @@ func workingTaskSourceLabel(kind state.QueueItemSourceKind) string {
 		return "自动继续任务"
 	default:
 		return ""
+	}
+}
+
+func workingTaskPersistedOrigin(source threadcatalogcontract.WorkingTaskSource) workingTaskOrigin {
+	switch source {
+	case threadcatalogcontract.WorkingTaskSourceCodexCLI:
+		return workingTaskOriginCodexCLI
+	case threadcatalogcontract.WorkingTaskSourceMultica:
+		return workingTaskOriginMultica
+	default:
+		return workingTaskOriginCodexDesktop
+	}
+}
+
+func workingTaskOriginLabel(origin workingTaskOrigin) string {
+	switch origin {
+	case workingTaskOriginCodexCLI:
+		return "Codex CLI"
+	case workingTaskOriginMultica:
+		return "Multica"
+	case workingTaskOriginCodexDesktop:
+		return "Codex Desktop"
+	default:
+		return "飞书"
 	}
 }
 

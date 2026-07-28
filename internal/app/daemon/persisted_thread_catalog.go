@@ -16,6 +16,7 @@ type daemonPersistedThreadCatalog struct {
 }
 
 var _ threadcatalogcontract.BackendAwarePersistedThreadCatalog = (*daemonPersistedThreadCatalog)(nil)
+var _ threadcatalogcontract.WorkingTaskCatalog = (*daemonPersistedThreadCatalog)(nil)
 
 func newDaemonPersistedThreadCatalog(logf func(string, ...any)) (*daemonPersistedThreadCatalog, error) {
 	codexCatalog, err := codexstate.NewDefaultSQLiteThreadCatalog(codexstate.SQLiteThreadCatalogOptions{Logf: logf})
@@ -38,6 +39,13 @@ func (c *daemonPersistedThreadCatalog) RecentWorkspaces(limit int) (map[string]t
 
 func (c *daemonPersistedThreadCatalog) ThreadByID(threadID string) (*state.ThreadRecord, error) {
 	return c.ThreadByIDForBackend(agentproto.BackendCodex, threadID)
+}
+
+func (c *daemonPersistedThreadCatalog) WorkingTasks(limit int) ([]threadcatalogcontract.WorkingTaskRecord, error) {
+	if c == nil || c.codex == nil {
+		return nil, nil
+	}
+	return c.codex.WorkingTasks(limit)
 }
 
 func (c *daemonPersistedThreadCatalog) RecentThreadsForBackend(backend agentproto.Backend, limit int) ([]state.ThreadRecord, error) {

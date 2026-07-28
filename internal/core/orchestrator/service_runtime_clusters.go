@@ -216,6 +216,21 @@ func (r *serviceCatalogRuntime) recentPersistedWorkspacesForBackend(backend agen
 	return workspaceRecencyFromThreads(r.recentPersistedThreadsForBackend(backend, persistedRecentThreadLimit))
 }
 
+func (r *serviceCatalogRuntime) workingTasks(limit int) []threadcatalogcontract.WorkingTaskRecord {
+	if r == nil || r.persistedThreads == nil {
+		return nil
+	}
+	catalog, ok := r.persistedThreads.(threadcatalogcontract.WorkingTaskCatalog)
+	if !ok {
+		return nil
+	}
+	tasks, err := catalog.WorkingTasks(limit)
+	if err != nil {
+		return nil
+	}
+	return append([]threadcatalogcontract.WorkingTaskRecord(nil), tasks...)
+}
+
 func (r *serviceCatalogRuntime) persistedThreadByIDForBackend(backend agentproto.Backend, threadID string) (*state.ThreadRecord, error) {
 	if r == nil || r.persistedThreads == nil {
 		return nil, nil

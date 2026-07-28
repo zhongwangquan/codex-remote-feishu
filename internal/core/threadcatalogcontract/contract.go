@@ -18,3 +18,22 @@ type BackendAwarePersistedThreadCatalog interface {
 	RecentWorkspacesForBackend(agentproto.Backend, int) (map[string]time.Time, error)
 	ThreadByIDForBackend(agentproto.Backend, string) (*state.ThreadRecord, error)
 }
+
+type WorkingTaskSource string
+
+const (
+	WorkingTaskSourceCodexDesktop WorkingTaskSource = "codex_desktop"
+	WorkingTaskSourceCodexCLI     WorkingTaskSource = "codex_cli"
+	WorkingTaskSourceMultica      WorkingTaskSource = "multica"
+)
+
+type WorkingTaskRecord struct {
+	Thread state.ThreadRecord
+	Source WorkingTaskSource
+}
+
+// WorkingTaskCatalog is an optional extension implemented by persisted thread
+// catalogs that can prove which local threads still have an active turn.
+type WorkingTaskCatalog interface {
+	WorkingTasks(limit int) ([]WorkingTaskRecord, error)
+}

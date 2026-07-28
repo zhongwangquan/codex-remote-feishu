@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
 )
 
 func TestTasksCommandGroupsThreadTitlesByWorkspace(t *testing.T) {
@@ -133,6 +134,82 @@ func TestWorkingTaskSummariesDeduplicateQueuedTurnsForSameThread(t *testing.T) {
 	}
 	if tasks[0].TaskTitle != "修复结算流程" || tasks[0].Status != state.QueueItemRunning {
 		t.Fatalf("task = %#v, want running Codex thread title", tasks[0])
+	}
+}
+
+func TestTasksCommandMergesFeishuAndCodexDesktopTasksByWorkspace(t *testing.T) {
+	now := time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:   "inst-shop",
+		WorkspaceKey: "/data/shop",
+		Online:       true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-feishu": {ThreadID: "thread-feishu", Name: "检查飞书同步"},
+		},
+	})
+	surface := svc.ensureSurface(control.Action{SurfaceSessionID: "surface-shop"})
+	surface.AttachedInstanceID = "inst-shop"
+	surface.ActiveQueueItemID = "queue-feishu"
+	surface.QueueItems["queue-feishu"] = &state.QueueItemRecord{
+		ID:                 "queue-feishu",
+		FrozenDispatchPlan: agentproto.DefaultPromptDispatchPlanForExecutionThread("thread-feishu"),
+		Status:             state.QueueItemRunning,
+	}
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		working: []threadcatalogcontract.WorkingTaskRecord{
+			{
+				Thread: state.ThreadRecord{
+					ThreadID:     "thread-desktop",
+					Name:         "修复桌面端预览",
+					WorkspaceKey: "/data/shop",
+					CWD:          "/data/shop",
+				},
+				Source: threadcatalogcontract.WorkingTaskSourceCodexDesktop,
+			},
+			{
+				Thread: state.ThreadRecord{
+					ThreadID:     "thread-cli",
+					Name:         "执行回归测试",
+					WorkspaceKey: "/data/shop",
+					CWD:          "/data/shop",
+				},
+				Source: threadcatalogcontract.WorkingTaskSourceCodexCLI,
+			},
+			{
+				Thread: state.ThreadRecord{
+					ThreadID:     "thread-feishu",
+					Name:         "不应覆盖飞书来源",
+					WorkspaceKey: "/data/shop",
+					CWD:          "/data/shop",
+				},
+				Source: threadcatalogcontract.WorkingTaskSourceCodexDesktop,
+			},
+		},
+	})
+
+	page := commandCatalogFromEvent(t, svc.tasksTerminalPageEvent(surface, control.Action{}))
+	sections := control.BuildFeishuPageBodySections(*page)
+	if len(sections) != 2 {
+		t.Fatalf("tasks sections = %#v, want summary + one workspace", sections)
+	}
+	text := commandCatalogSummaryText(page)
+	for _, want := range []string{
+		"共 3 个正在工作或等待执行的任务。",
+		"shop",
+		"检查飞书同步",
+		"来源：飞书",
+		"修复桌面端预览",
+		"来源：Codex Desktop",
+		"执行回归测试",
+		"来源：Codex CLI",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("tasks page %q does not contain %q", text, want)
+		}
+	}
+	if strings.Contains(text, "不应覆盖飞书来源") {
+		t.Fatalf("tasks page %q should prefer the Feishu projection for a duplicate thread", text)
 	}
 }
 
