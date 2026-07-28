@@ -27,13 +27,22 @@ const (
 	WorkingTaskSourceMultica      WorkingTaskSource = "multica"
 )
 
+type WorkingTaskState string
+
+const (
+	WorkingTaskStateActive      WorkingTaskState = "active"
+	WorkingTaskStateContinuable WorkingTaskState = "continuable"
+)
+
 type WorkingTaskRecord struct {
 	Thread state.ThreadRecord
 	Source WorkingTaskSource
+	State  WorkingTaskState
 }
 
 // WorkingTaskCatalog is an optional extension implemented by persisted thread
-// catalogs that can prove which local threads still have an active turn.
+// catalogs that can discover active local turns and unarchived Desktop tasks
+// that remain available for continuation.
 type WorkingTaskCatalog interface {
 	WorkingTasks(limit int) ([]WorkingTaskRecord, error)
 }

@@ -4,6 +4,8 @@
 > Updated: `2026-07-28`
 > Summary: 当前实现同步了 workspace-aware headless 主链与 vscode 主链，并把当前 live 的 backend-aware 可见命令面收口到新的投影；2026-07-28 补充：`codex/claude headless` 的 `/workspace` 父页新增 `工作任务`，直接复用现有 `/tasks` 只读 terminal 投影，不创建新的 route / queue / dispatch 状态；该投影现在还会合并本机 Codex Desktop、Codex CLI 与 Multica 中有未闭合且最近仍活跃的顶层任务，按 workspace 聚合并显示来源。2026-07-24 补充：Feishu 群聊 surface materialize/resume 时会维护一层 room context coordination record，V1 room id 使用 `feishu:chat:<chatID>`，record 保存 `chatID`、参与过的 gateway evidence、surface evidence、room workspace binding 与 reset generation；私聊 surface 不进入 room context。headless workspace claim owner 现在已经从单 `SurfaceSessionID` 扩展为 `surface` / `room` 结构化 owner：同一 room 下多个群 surface 可共享同一个 workspace claim，但 instance/thread claim 仍保持 surface 级独占，不共享会话；room 已绑定后切到其它 workspace 属于 destructive admin action，会在 route/launch 前做安全 blocker 与群管理员校验，成功后 reset 同 room 其它 surface 的 context-bound runtime。2026-07-22 补充：Feishu 群聊入站现在在 materialize surface / record message / queue dispatch 前必须确认消息 @ 当前 bot，未 @ 当前 bot、无 mention 或当前 bot identity 不可用时 fail closed 忽略，不进入 remote surface 状态机。`codex` 继续以 `workspace` 命令族作为主展示壳，`claude` 当前 live 实现也把 `switch_target` 收口到同一套 `/workspace` 父页与 `切换 / 工作任务 / 从目录新建 / 从 GIT URL 新建 / 从 Worktree 新建 / 解除接管` 六个入口，`current_work` 继续保留 `/new` 等当前工作动作，`常用工具` 继续收口到 `/history` 与 `/sendfile`；`/list`、`/use`、裸 `/detach` 则退回 hidden + allow 兼容 alias。`send_settings` 则改成 backend 互斥入口：`codex headless` 可见 `/codexprovider`，`claude headless` 可见 `/claudeprofile`，`vscode` 两者都隐藏，且手动输入错误 backend 的命令也会显式拒绝。`/model` 打开参数卡时会 best-effort 发送后台 `model.list` 能力刷新，但该命令不进入 queue/dispatch/pendingRemote，也不改变 route 状态；动态模型目录只作为 instance-scoped cache 服务 Feishu 菜单；Codex/VS Code `/reasoning` 的普通快捷项现在跟随当前模型的动态 `supportedReasoningEfforts`，未知模型或目录不可校验时不再展示全局硬编码档位。Codex prompt dispatch 现在只下发用户显式 reasoning override，空值表示自动；dispatch 前若目录可判定 `model + reasoning` 不兼容，会丢弃该 reasoning override 并发一次节流 runtime notice。thread lifecycle notification 现在是 state-only：`thread/closed` 只标记 notLoaded、不 detach；`thread/deleted` 会把命中 surface 清成 attached-unbound，防止继续路由到旧 thread。`/list` `/use` / target picker / workspace recency 全部只按当前 backend 过滤，且不再因为 surface/instance `ClaudeProfileID` 不同而隐藏 Claude workspace/session 候选；同时工作区一旦确定，`/workspace list` 与 alias `/list` 现在会把 `新建会话` 置顶并默认选中，`/use`、`/useall` 与锁定工作区的恢复 picker 则继续保留 `新建会话` fallback。2026-07-12 的补充是：`mcpServer/elicitation/request` 承载 MCP tool approval 时会按 `_meta.codex_approval_kind=mcp_tool_call` 进入 `mcp_server_elicitation_approval` 语义，仍复用 `G2 PendingRequest` gate 与 `request_respond` transport；飞书端只开放“允许本次 / 本会话允许”，本会话允许会回写 top-level `_meta.persist=session`，`persist=always` 仅提示暂不支持跨会话持久授权。同日补充：`mcpServer/oauth/login -> oauthLogin/completed` 已通过 help-visible、menu-hidden 的 `/mcpoauth <server>` 接入最小主动链路；它不进入 request gate，不做流式卡片，只向发起 surface append 授权链接与最终成功/失败 notice。2026-06-05 的补充是：headless auto-resume 的运行态只在真实恢复目标身份变化时重置 backoff / last notice，标题、更新时间等非目标元数据刷新不会把同一失败 episode 重新刷成新失败；auto-restore 启动的 managed headless 一旦连回，若 exact-thread 接管失败，也会立刻终止本轮 `PendingHeadless`、kill 这次拉起的 headless，并保留持久化恢复目标等待后续 backoff 重试。2026-05-31 的补充是：headless auto-resume 现在把“恢复 episode 的稳定失败根因”与“后续 retry 观测到的派生 busy/not_found 状态”分开记账；provider/profile/runtime 这类启动前失败会保留为本轮恢复的 canonical cause，并且只有在真正恢复成功或 target 改变后才会清空，因此后续 retry 不会再把用户提示改写成误导性的 workspace/thread busy，也不会对同一根因重复刷失败卡。2026-05-01 的新变化是：headless attach/reuse/restart/create/reject 已进一步收口成单一路径，visible 与 compatibility 继续拆层，但所有 consumer 现在都共享同一个 `desired surface contract vs observed instance contract` 解析核。结果是：
 >
+> 2026-07-28 `/tasks` Desktop 投影补充：本机 Codex Desktop 顶层用户任务即使当前没有未闭合 turn，只要未归档且最近 24 小时仍有活动，也会以 `可继续` 展示；真实未闭合且最近 10 分钟仍有 rollout 写入的任务显示为 `执行中`。Codex CLI / Multica 仍只展示真实活跃任务，automation、subagent 与 `Codex Remote Headless` 继续排除。这是只读投影状态，不新增 route / queue / dispatch 状态。
+>
 > 2026-07-28 模型所有权补充：Codex headless 在没有飞书显式 `/model` / `/reasoning` 覆盖时，不再由 remote 固定 `gpt-5.4` / `xhigh`，也不会把 thread observed model 复制成新一轮 override；新会话与后续 turn 都把 model / reasoning 留给 Codex app-server 自身配置和线程状态。`/model clear` 会回到这条跟随语义，参数卡明确显示“跟随 Codex 配置”。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
@@ -1055,19 +1057,21 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 ### 4.15.1 `/tasks` 是按 workspace 聚合的多来源 thread-level 只读投影
 
-当前 `/tasks` 不创建新的 queue / dispatch 状态，也不改变任何 surface route；它合并 relay surface 的 active/queued queue item 与本机 persisted Codex catalog 中仍有活动证据的顶层任务，并投影为当前工作任务列表。
+当前 `/tasks` 不创建新的 queue / dispatch 状态，也不改变任何 surface route；它合并 relay surface 的 active/queued queue item 与本机 persisted Codex catalog 的顶层用户任务，并按来源语义投影为执行中、排队中或可继续的当前工作任务列表。
 
 当前行为已经固定为：
 
 1. 飞书任务身份优先使用 queue item 冻结执行计划里的 `ExecutionThreadID`，并从 attached instance 的 `ThreadRecord` 读取 Codex 会话标题。
 2. 若对应 thread 暂时不可解析或仍未命名，才回退到 source / reply message preview 或自动任务类型标签；因此“当前状态”“继续”这类本轮输入不再覆盖已经存在的 Codex 任务标题。
-3. 本机 persisted 任务只纳入 `source=cli|vscode` 且 `agent_role` 为空的顶层交互线程；rollout 最新相关生命周期必须是 `task_started`，并且 rollout 文件在最近 10 分钟仍有写入。`task_complete`、`turn_aborted`、活动窗口外的未闭合残影和 subagent 都不展示。
-4. persisted 来源按 rollout `session_meta.originator` 映射为 `Codex Desktop`、`Codex CLI` 或 `Multica`；`Codex Remote Headless` 明确排除，因为它已经由 relay surface 的 authoritative queue/runtime 路径拥有。
-5. 同一 `workspace + execution thread` 只展示一个任务；同一 thread 同时存在 active 与 queued item 时 active 优先，同一 thread 同时命中 persisted 与飞书 runtime 时飞书优先，避免重复。
-6. 结果先按 workspace 分组，同一 workspace 下允许并列多个正在执行或排队中的任务，并逐条显示来源。
-7. 投影最多展开 50 个去重后的任务；workspace 与任务标题都限制为 40 个 rune，超出任务只展示剩余数量。最坏 50 个 workspace 时约产生 100 个正文元素，低于当前 Feishu 卡片 200 element / 30 KB 基线。
-8. workspace、任务标题、来源与状态属于动态文本，只进入 `FeishuCardTextSection.Lines` 并由 adapter 渲染为 `plain_text`；section label 只使用固定系统文案，动态值不得进入 raw markdown。
-9. 这条 persisted catalog 是只读发现，不表示 relay 已经接管 Codex Desktop 正在使用的 app-server；因此 `/tasks` 当前不能据此直接 steer/interrupt Desktop turn。
+3. 本机 persisted 任务只纳入 `source=cli|vscode` 且 `agent_role` 为空的顶层交互线程。rollout 最新相关生命周期是 `task_started` 且文件在最近 10 分钟仍有写入时，记录状态为 `执行中`；这条短活动窗口用于避免未正确闭合的旧 rollout 残影长期伪装成运行中。
+4. Codex Desktop 记录即使最新生命周期已经完成或终止，只要线程未归档、属于顶层用户任务且最近 24 小时仍有活动，也会以 `可继续` 展示；超过 24 小时的历史不进入工作任务页。结构化 `thread_source` 非 `user` 的记录，以及旧数据库中标题或首条用户消息以 `Automation:` 开头的 automation 记录均排除。
+5. Codex CLI 与 Multica 仍只展示满足第 3 条真实活动证据的任务，不把已完成的命令行历史扩成 `可继续`；subagent 继续排除。
+6. persisted 来源按 rollout `session_meta.originator` 映射为 `Codex Desktop`、`Codex CLI` 或 `Multica`；`Codex Remote Headless` 明确排除，因为它已经由 relay surface 的 authoritative queue/runtime 路径拥有。
+7. 同一 `workspace + execution thread` 只展示一个任务；同一 thread 同时存在 active 与 queued item 时 active 优先，同一 thread 同时命中 persisted 与飞书 runtime 时飞书优先，避免重复。
+8. 结果先按 workspace 分组，同一 workspace 下允许并列多个执行中、排队中或可继续的任务，并逐条显示来源与状态。
+9. 投影最多展开 50 个去重后的任务；workspace 与任务标题都限制为 40 个 rune，超出任务只展示剩余数量。最坏 50 个 workspace 时约产生 100 个正文元素，低于当前 Feishu 卡片 200 element / 30 KB 基线。
+10. workspace、任务标题、来源与状态属于动态文本，只进入 `FeishuCardTextSection.Lines` 并由 adapter 渲染为 `plain_text`；section label 只使用固定系统文案，动态值不得进入 raw markdown。
+11. `可继续` 只是 persisted catalog 的只读投影状态，不进入 remote surface route/queue/dispatch 状态机，也不表示 relay 已经接管 Codex Desktop 正在使用的 app-server；因此 `/tasks` 当前不能据此直接 steer/interrupt Desktop turn。
 
 ### 4.16 autowhip 调度只允许走显式 reply-anchor，不再伪造用户消息 pending/typing
 
@@ -1679,7 +1683,7 @@ transport degraded retained attachment
 | 请求按钮 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 理论上通常不会出现；若出现仍按 attached surface 处理 |
 | `/stop` | 通常无效果 | 通常无效果 | 允许 | 允许 | 允许 | 允许；可清掉 staged/queued draft |
 | `/status` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
-| `/tasks` | 允许；只读汇总飞书与本机 Codex Desktop/CLI/Multica 的活跃顶层 thread | 允许；只读汇总飞书与本机 Codex Desktop/CLI/Multica 的活跃顶层 thread | 允许；只读汇总飞书与本机 Codex Desktop/CLI/Multica 的活跃顶层 thread | 允许；只读汇总飞书与本机 Codex Desktop/CLI/Multica 的活跃顶层 thread | 允许；只读汇总飞书与本机 Codex Desktop/CLI/Multica 的活跃顶层 thread | 允许；只读汇总飞书与本机 Codex Desktop/CLI/Multica 的活跃顶层 thread |
+| `/tasks` | 允许；只读汇总飞书 active/queued、本机 CLI/Multica active 与最近 24 小时可继续的 Desktop 顶层用户 thread | 允许；同左 | 允许；同左 | 允许；同左 | 允许；同左 | 允许；同左 |
 | `/detach` | 允许但通常只提示已 detached；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；dispatching/running 时走 abandoning；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias |
 | bare `/mode` / bare `/autowhip` / bare `/autocontinue` | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
 | bare `/model` `/reasoning` `/access` | 允许，但 detached 时只回恢复/参数卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
@@ -1889,7 +1893,7 @@ retained-offline overlay 额外规则：
 11. Codex dispatch guard 是否只丢弃“目录已知且明确不兼容”的 reasoning override，并且不误伤 unknown/manual model、Claude launch contract 或 model/access override。
 12. Feishu room workspace 切换是否仍只在真正 destructive workspace change 前触发，且当前 surface blocker、同 room unsafe blocker、管理员校验、sibling reset、最终 binding 写入保持同一顺序；普通同 workspace `/use` / session 选择不能调用管理员 API。
 13. prompt-dispatch watchdog 是否仍从真实 `prompt.send` command bind 开始计时、在 `turn.started` 后立即失效、对同一 queue item 只切一次，并在兜底 turn terminal 后回到标准 managed headless；Feishu notice 失败不能阻塞 daemon kill/start。
-14. `/tasks` 是否仍以 `workspace + execution thread` 作为任务身份、飞书 runtime 优先于同 thread persisted 记录、active 优先于 queued item，并保持本机任务的未闭合生命周期 + 最近活动证据、只读边界、50 任务容量降级与动态文本 `plain_text` 边界。
+14. `/tasks` 是否仍以 `workspace + execution thread` 作为任务身份、飞书 runtime 优先于同 thread persisted 记录、active 优先于 queued item；CLI/Multica 是否仍只认未闭合生命周期 + 10 分钟活动证据；Desktop 是否只把未归档的顶层用户任务在 24 小时内投影为 `可继续`，并排除 automation/subagent/Remote Headless；同时是否保持只读边界、50 任务容量降级与动态文本 `plain_text` 边界。
 
 ## 11. 待讨论取舍
 

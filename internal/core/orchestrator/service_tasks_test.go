@@ -166,6 +166,7 @@ func TestTasksCommandMergesFeishuAndCodexDesktopTasksByWorkspace(t *testing.T) {
 					CWD:          "/data/shop",
 				},
 				Source: threadcatalogcontract.WorkingTaskSourceCodexDesktop,
+				State:  threadcatalogcontract.WorkingTaskStateContinuable,
 			},
 			{
 				Thread: state.ThreadRecord{
@@ -175,6 +176,7 @@ func TestTasksCommandMergesFeishuAndCodexDesktopTasksByWorkspace(t *testing.T) {
 					CWD:          "/data/shop",
 				},
 				Source: threadcatalogcontract.WorkingTaskSourceCodexCLI,
+				State:  threadcatalogcontract.WorkingTaskStateActive,
 			},
 			{
 				Thread: state.ThreadRecord{
@@ -184,6 +186,7 @@ func TestTasksCommandMergesFeishuAndCodexDesktopTasksByWorkspace(t *testing.T) {
 					CWD:          "/data/shop",
 				},
 				Source: threadcatalogcontract.WorkingTaskSourceCodexDesktop,
+				State:  threadcatalogcontract.WorkingTaskStateContinuable,
 			},
 		},
 	})
@@ -195,12 +198,13 @@ func TestTasksCommandMergesFeishuAndCodexDesktopTasksByWorkspace(t *testing.T) {
 	}
 	text := commandCatalogSummaryText(page)
 	for _, want := range []string{
-		"共 3 个正在工作或等待执行的任务。",
+		"共 3 个执行中、排队或可继续的任务。",
 		"shop",
 		"检查飞书同步",
 		"来源：飞书",
 		"修复桌面端预览",
 		"来源：Codex Desktop",
+		"状态：可继续",
 		"执行回归测试",
 		"来源：Codex CLI",
 	} {
@@ -239,7 +243,7 @@ func TestTasksCommandCapsLargeTaskLists(t *testing.T) {
 		t.Fatalf("tasks sections = %d, want summary + %d workspace groups + overflow", len(sections), workingTaskCardMaxTasks)
 	}
 	text := commandCatalogSummaryText(page)
-	if !strings.Contains(text, "共 52 个正在工作或等待执行的任务。") || !strings.Contains(text, "另有 2 个任务未展开。") {
+	if !strings.Contains(text, "共 52 个执行中、排队或可继续的任务。") || !strings.Contains(text, "另有 2 个任务未展开。") {
 		t.Fatalf("capped tasks page = %q", text)
 	}
 }
@@ -254,7 +258,7 @@ func TestTasksCommandShowsEmptyState(t *testing.T) {
 		ActorUserID:      "user-empty",
 	})
 	page := commandCatalogFromEvent(t, events[0])
-	if text := commandCatalogSummaryText(page); !strings.Contains(text, "当前没有正在执行或排队中的任务") {
+	if text := commandCatalogSummaryText(page); !strings.Contains(text, "当前没有执行中、排队或可继续的任务") {
 		t.Fatalf("empty tasks page = %q", text)
 	}
 }

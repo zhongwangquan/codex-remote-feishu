@@ -162,40 +162,42 @@ CREATE TABLE threads (
 	memory_mode TEXT NOT NULL DEFAULT 'enabled',
 	model TEXT,
 	reasoning_effort TEXT,
-	agent_path TEXT
+	agent_path TEXT,
+	thread_source TEXT
 )`); err != nil {
 		t.Fatalf("create threads table: %v", err)
 	}
 	insert := `
 INSERT INTO threads (
 	id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode,
-	tokens_used, has_user_event, archived, cli_version, first_user_message, memory_mode, model, reasoning_effort, agent_role
-) VALUES (?, ?, 0, ?, ?, 'openai', ?, ?, 'workspace-write', 'never', 0, 0, ?, '', ?, 'enabled', ?, ?, ?)
+	tokens_used, has_user_event, archived, cli_version, first_user_message, memory_mode, model, reasoning_effort, agent_role, thread_source
+) VALUES (?, ?, 0, ?, ?, 'openai', ?, ?, 'workspace-write', 'never', 0, 0, ?, '', ?, 'enabled', ?, ?, ?, ?)
 `
 	rows := []struct {
-		id        string
-		updatedAt int64
-		source    string
-		cwd       string
-		title     string
-		archived  int
-		preview   string
-		model     string
-		reasoning string
-		agentRole string
+		id           string
+		updatedAt    int64
+		source       string
+		cwd          string
+		title        string
+		archived     int
+		preview      string
+		model        string
+		reasoning    string
+		agentRole    string
+		threadSource string
 	}{
-		{id: "thread-1", updatedAt: 1775710100, source: "cli", cwd: testutil.WorkspacePath("data", "dl", "droid"), title: "修复登录流程", archived: 0, preview: "第一条消息", model: "gpt-5.4", reasoning: "xhigh"},
-		{id: "thread-2", updatedAt: 1775710150, source: "cli", cwd: testutil.WorkspacePath("data", "dl", "archived"), title: "旧会话", archived: 1, preview: "已归档", model: "gpt-5.4", reasoning: "medium"},
-		{id: "thread-3", updatedAt: 1775710200, source: "vscode", cwd: testutil.WorkspacePath("data", "dl", "web"), title: "整理样式", archived: 0, preview: "第三条消息", model: "gpt-5.4", reasoning: "high"},
-		{id: "thread-exec", updatedAt: 1775710400, source: "exec", cwd: testutil.WorkspacePath("data", "dl", "_tmp-codex-thread-latency-hidden"), title: "Latency Probe", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "low"},
-		{id: "thread-subagent", updatedAt: 1775710350, source: "cli", cwd: testutil.WorkspacePath("data", "dl", "workerproj"), title: "子代理", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "medium", agentRole: "worker"},
-		{id: "thread-probe", updatedAt: 1775710300, source: "vscode", cwd: testutil.WorkspacePath("data", "dl", "_tmp-codex-appserver-hidden"), title: "APP_SERVER_LATENCY_PROBE", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "low"},
-		{id: "thread-mcp", updatedAt: 1775710250, source: "mcp", cwd: testutil.WorkspacePath("data", "dl", "testgame"), title: "MCP 会话", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "medium"},
-		{id: "thread-cron", updatedAt: 1775710500, source: "cli", cwd: testutil.WorkspacePath("tmp", "daemon-state", "cron-repos", "runs", "inst-cron-1", "worktree"), title: "Cron 会话", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "medium"},
+		{id: "thread-1", updatedAt: 1775710100, source: "cli", cwd: testutil.WorkspacePath("data", "dl", "droid"), title: "修复登录流程", archived: 0, preview: "第一条消息", model: "gpt-5.4", reasoning: "xhigh", threadSource: "user"},
+		{id: "thread-2", updatedAt: 1775710150, source: "cli", cwd: testutil.WorkspacePath("data", "dl", "archived"), title: "旧会话", archived: 1, preview: "已归档", model: "gpt-5.4", reasoning: "medium", threadSource: "user"},
+		{id: "thread-3", updatedAt: 1775710200, source: "vscode", cwd: testutil.WorkspacePath("data", "dl", "web"), title: "整理样式", archived: 0, preview: "第三条消息", model: "gpt-5.4", reasoning: "high", threadSource: "user"},
+		{id: "thread-exec", updatedAt: 1775710400, source: "exec", cwd: testutil.WorkspacePath("data", "dl", "_tmp-codex-thread-latency-hidden"), title: "Latency Probe", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "low", threadSource: "user"},
+		{id: "thread-subagent", updatedAt: 1775710350, source: "cli", cwd: testutil.WorkspacePath("data", "dl", "workerproj"), title: "子代理", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "medium", agentRole: "worker", threadSource: "subagent"},
+		{id: "thread-probe", updatedAt: 1775710300, source: "vscode", cwd: testutil.WorkspacePath("data", "dl", "_tmp-codex-appserver-hidden"), title: "APP_SERVER_LATENCY_PROBE", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "low", threadSource: "user"},
+		{id: "thread-mcp", updatedAt: 1775710250, source: "mcp", cwd: testutil.WorkspacePath("data", "dl", "testgame"), title: "MCP 会话", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "medium", threadSource: "user"},
+		{id: "thread-cron", updatedAt: 1775710500, source: "cli", cwd: testutil.WorkspacePath("tmp", "daemon-state", "cron-repos", "runs", "inst-cron-1", "worktree"), title: "Cron 会话", archived: 0, preview: "不该出现", model: "gpt-5.4", reasoning: "medium", threadSource: "user"},
 	}
 	for _, row := range rows {
 		rolloutPath := filepath.Join(row.cwd, row.id+".jsonl")
-		if _, err := db.Exec(insert, row.id, rolloutPath, row.updatedAt, row.source, row.cwd, row.title, row.archived, row.preview, row.model, row.reasoning, row.agentRole); err != nil {
+		if _, err := db.Exec(insert, row.id, rolloutPath, row.updatedAt, row.source, row.cwd, row.title, row.archived, row.preview, row.model, row.reasoning, row.agentRole, row.threadSource); err != nil {
 			t.Fatalf("insert thread %s: %v", row.id, err)
 		}
 	}

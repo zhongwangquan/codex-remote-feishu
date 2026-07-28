@@ -21,6 +21,7 @@ const (
 	workingTaskMaxCandidateLimit  = 1000
 	rolloutLifecycleReadChunkSize = 64 * 1024
 	workingTaskActivityWindow     = 10 * time.Minute
+	workingTaskContinuableWindow  = 24 * time.Hour
 )
 
 type workingTaskCandidate struct {
@@ -54,22 +55,6 @@ func (c *SQLiteThreadCatalog) WorkingTasks(limit int) ([]threadcatalogcontract.W
 	}
 	tasks := make([]threadcatalogcontract.WorkingTaskRecord, 0, min(limit, len(candidates)))
 	for _, candidate := range candidates {
-		info, statErr := os.Stat(candidate.rolloutPath)
-		if statErr != nil {
-			c.logError("stat working task rollout", statErr)
-			continue
-		}
-		if c.now().Sub(info.ModTime()) > workingTaskActivityWindow {
-			continue
-		}
-		active, lifecycleErr := rolloutHasActiveTask(candidate.rolloutPath)
-		if lifecycleErr != nil {
-			c.logError("read working task lifecycle", lifecycleErr)
-			continue
-		}
-		if !active {
-			continue
-		}
 		originator, originatorErr := rolloutOriginator(candidate.rolloutPath)
 		if originatorErr != nil {
 			c.logError("read working task originator", originatorErr)
@@ -79,9 +64,23 @@ func (c *SQLiteThreadCatalog) WorkingTasks(limit int) ([]threadcatalogcontract.W
 		if !include {
 			continue
 		}
+		active := c.workingTaskCandidateActive(candidate)
+		if source != threadcatalogcontract.WorkingTaskSourceCodexDesktop && !active {
+			continue
+		}
+		if source == threadcatalogcontract.WorkingTaskSourceCodexDesktop &&
+			!active &&
+			c.now().Sub(candidate.thread.LastUsedAt) > workingTaskContinuableWindow {
+			continue
+		}
+		taskState := threadcatalogcontract.WorkingTaskStateContinuable
+		if active {
+			taskState = threadcatalogcontract.WorkingTaskStateActive
+		}
 		tasks = append(tasks, threadcatalogcontract.WorkingTaskRecord{
 			Thread: candidate.thread,
 			Source: source,
+			State:  taskState,
 		})
 		if len(tasks) >= limit {
 			break
@@ -90,9 +89,34 @@ func (c *SQLiteThreadCatalog) WorkingTasks(limit int) ([]threadcatalogcontract.W
 	return tasks, nil
 }
 
+func (c *SQLiteThreadCatalog) workingTaskCandidateActive(candidate workingTaskCandidate) bool {
+	info, err := os.Stat(candidate.rolloutPath)
+	if err != nil {
+		c.logError("stat working task rollout", err)
+		return false
+	}
+	if c.now().Sub(info.ModTime()) > workingTaskActivityWindow {
+		return false
+	}
+	active, err := rolloutHasActiveTask(candidate.rolloutPath)
+	if err != nil {
+		c.logError("read working task lifecycle", err)
+		return false
+	}
+	return active
+}
+
 func (c *SQLiteThreadCatalog) workingTaskCandidates(limit int) ([]workingTaskCandidate, error) {
 	var candidates []workingTaskCandidate
 	err := c.readWithRetry("query working task candidates", func(db *sql.DB) error {
+		threadSourceFilter := ""
+		hasThreadSource, err := sqliteTableHasColumn(db, "threads", "thread_source")
+		if err != nil {
+			return err
+		}
+		if hasThreadSource {
+			threadSourceFilter = "\n  AND COALESCE(NULLIF(TRIM(thread_source), ''), 'user') = 'user'"
+		}
 		rows, err := db.Query(`
 SELECT id, title, cwd, updated_at, source, rollout_path, first_user_message
 FROM threads
@@ -101,7 +125,9 @@ WHERE archived = 0
   AND COALESCE(agent_role, '') = ''
   AND cwd NOT LIKE '%/_tmp-codex-thread-latency-%'
   AND cwd NOT LIKE '%/_tmp-codex-appserver-%'
-  AND cwd NOT LIKE ?
+  AND title NOT LIKE 'Automation:%'
+  AND first_user_message NOT LIKE 'Automation:%'
+  AND cwd NOT LIKE ?`+threadSourceFilter+`
 ORDER BY updated_at DESC, id DESC
 LIMIT ?
 `, cronRepoRunPathPattern, limit)
@@ -157,6 +183,31 @@ LIMIT ?
 		return nil
 	})
 	return candidates, err
+}
+
+func sqliteTableHasColumn(db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			columnType string
+			notNull    int
+			defaultVal any
+			primaryKey int
+		)
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultVal, &primaryKey); err != nil {
+			return false, err
+		}
+		if strings.EqualFold(strings.TrimSpace(name), strings.TrimSpace(column)) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 func workingTaskCandidateLimit(taskLimit int) int {
