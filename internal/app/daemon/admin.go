@@ -141,8 +141,9 @@ type adminConfigView struct {
 }
 
 type adminFeishuSettingsView struct {
-	UseSystemProxy bool                 `json:"useSystemProxy"`
-	Apps           []adminFeishuAppView `json:"apps,omitempty"`
+	UseSystemProxy bool                           `json:"useSystemProxy"`
+	Attention      config.FeishuAttentionSettings `json:"attention"`
+	Apps           []adminFeishuAppView           `json:"apps,omitempty"`
 }
 
 type adminFeishuAppView struct {
@@ -646,6 +647,7 @@ func redactAdminConfig(cfg config.AppConfig) adminConfigView {
 		Storage: cfg.Storage,
 		Feishu: adminFeishuSettingsView{
 			UseSystemProxy: cfg.Feishu.UseSystemProxy,
+			Attention:      cfg.Feishu.Attention,
 		},
 	}
 	for _, app := range cfg.Feishu.Apps {

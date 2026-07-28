@@ -52,6 +52,10 @@ type ExternalAccessRuntimeConfig struct {
 	CurrentBinary string
 }
 
+type FeishuAttentionRuntimeConfig struct {
+	MentionOnTurnCompletion bool
+}
+
 type externalAccessSettingsView struct {
 	ListenHost                  string
 	ListenPort                  int
@@ -123,6 +127,7 @@ type App struct {
 
 	pendingGlobalRuntimeNotices map[string][]eventcontract.Event
 	recentGlobalRuntimeNotices  map[string]map[string]time.Time
+	feishuAttention             FeishuAttentionRuntimeConfig
 	headlessRuntime             HeadlessRuntimeConfig
 	vscodeDetect                func() (vscodeDetectResponse, error)
 	detectPlatformDefaults      func() (install.PlatformDefaults, error)
@@ -203,6 +208,9 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		daemonLifecycleID:           daemonLifecycleID(serverIdentity, daemonStartedAt),
 		pendingGlobalRuntimeNotices: map[string][]eventcontract.Event{},
 		recentGlobalRuntimeNotices:  map[string]map[string]time.Time{},
+		feishuAttention: FeishuAttentionRuntimeConfig{
+			MentionOnTurnCompletion: true,
+		},
 		managedHeadlessRuntime:      headlessruntime.NewState(),
 		claudeWorkspaceProfileState: claudeWorkspaceProfileRuntimeState{},
 		surfaceResumeRuntime:        newSurfaceResumeRuntimeState(),
@@ -293,6 +301,12 @@ func (a *App) SetTurnPatchStorage(storage *codexstate.TurnPatchStorage) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.turnPatchRuntime.Storage = storage
+}
+
+func (a *App) SetFeishuAttention(cfg FeishuAttentionRuntimeConfig) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.feishuAttention = cfg
 }
 
 func gitExecutableAvailable() bool {

@@ -383,3 +383,77 @@ func TestHandleUIEventsSkipsAttentionWithoutActorIdentity(t *testing.T) {
 		t.Fatalf("expected original request card to stay unmentioned when actor missing, got %#v", gateway.operations[0])
 	}
 }
+
+func TestHandleUIEventsCanDisableTurnCompletionAttentionOnly(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, serverIdentityForTest())
+	app.SetFeishuAttention(FeishuAttentionRuntimeConfig{MentionOnTurnCompletion: false})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "ou-user-1")
+
+	app.handleUIEvents(context.Background(), []eventcontract.Event{
+		{
+			Kind:             eventcontract.KindBlockCommitted,
+			SurfaceSessionID: "surface-1",
+			SourceMessageID:  "om-source-1",
+			Block: &render.Block{
+				Kind:        render.BlockAssistantMarkdown,
+				Text:        "已完成修改。",
+				ThreadID:    "thread-1",
+				ThreadTitle: "droid · 修复登录流程",
+				ThemeKey:    "thread-1",
+				Final:       true,
+			},
+		},
+		{
+			Kind:             eventcontract.KindPage,
+			SurfaceSessionID: "surface-1",
+			PageView: &control.FeishuPageView{
+				CommandID: control.FeishuCommandPlan,
+				Title:     "提案计划",
+			},
+		},
+	})
+
+	if len(gateway.operations) != 2 {
+		t.Fatalf("expected final reply and plan cards, got %#v", gateway.operations)
+	}
+	for _, operation := range gateway.operations {
+		if operation.Kind != feishu.OperationSendCard || operation.AttentionText != "" || operation.AttentionUserID != "" {
+			t.Fatalf("expected disabled completion mention to leave final/plan cards unmentioned, got %#v", operation)
+		}
+	}
+
+	app.handleUIEvents(context.Background(), []eventcontract.Event{{
+		Kind:             eventcontract.KindNotice,
+		SurfaceSessionID: "surface-1",
+		Notice: &control.Notice{
+			Code: "turn_failed",
+			Text: "stream disconnected before completion",
+		},
+	}})
+	if len(gateway.operations) != 3 || gateway.operations[2].AttentionText != "" || gateway.operations[2].AttentionUserID != "" {
+		t.Fatalf("expected disabled completion mention to leave turn failure unmentioned, got %#v", gateway.operations)
+	}
+
+	app.handleUIEvents(context.Background(), []eventcontract.Event{{
+		Kind:             eventcontract.KindRequest,
+		SurfaceSessionID: "surface-1",
+		RequestView: &control.FeishuRequestView{
+			RequestID:       "req-still-attention-1",
+			RequestType:     "approval",
+			RequestRevision: 1,
+			Title:           "需要确认",
+			Options: []control.RequestPromptOption{{
+				OptionID: "accept",
+				Label:    "允许执行",
+			}},
+		},
+	}})
+
+	if len(gateway.operations) != 4 {
+		t.Fatalf("expected request card after final reply, got %#v", gateway.operations)
+	}
+	if gateway.operations[3].AttentionUserID != "ou-user-1" || gateway.operations[3].AttentionText != "需要你回来处理：请确认这条请求。" {
+		t.Fatalf("expected request attention to remain enabled, got %#v", gateway.operations[3])
+	}
+}

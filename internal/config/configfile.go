@@ -116,8 +116,17 @@ type WrapperSettings struct {
 }
 
 type FeishuSettings struct {
-	UseSystemProxy bool              `json:"useSystemProxy,omitempty"`
-	Apps           []FeishuAppConfig `json:"apps,omitempty"`
+	UseSystemProxy bool                    `json:"useSystemProxy,omitempty"`
+	Attention      FeishuAttentionSettings `json:"attention,omitempty"`
+	Apps           []FeishuAppConfig       `json:"apps,omitempty"`
+}
+
+type FeishuAttentionSettings struct {
+	MentionOnTurnCompletion *bool `json:"mentionOnTurnCompletion,omitempty"`
+}
+
+func (settings FeishuAttentionSettings) TurnCompletionMentionEnabled() bool {
+	return settings.MentionOnTurnCompletion == nil || *settings.MentionOnTurnCompletion
 }
 
 type FeishuAppConfig struct {
@@ -188,6 +197,11 @@ func DefaultAppConfig() AppConfig {
 			CodexRealBinary: "codex",
 			NameMode:        "workspace_basename",
 			IntegrationMode: "managed_shim",
+		},
+		Feishu: FeishuSettings{
+			Attention: FeishuAttentionSettings{
+				MentionOnTurnCompletion: boolPtr(true),
+			},
 		},
 		Storage: StorageSettings{
 			PreviewRootFolderName: defaultPreviewRootName,
@@ -429,6 +443,9 @@ func (cfg AppConfig) normalized() AppConfig {
 
 	cfg.Codex.Providers = NormalizeCodexProviders(cfg.Codex.Providers)
 	cfg.Claude.Profiles = NormalizeClaudeProfiles(cfg.Claude.Profiles)
+	if cfg.Feishu.Attention.MentionOnTurnCompletion == nil {
+		cfg.Feishu.Attention.MentionOnTurnCompletion = boolPtr(defaults.Feishu.Attention.TurnCompletionMentionEnabled())
+	}
 
 	if cfg.Debug.Pprof != nil {
 		normalized := cfg.Debug.Pprof.normalized()

@@ -109,6 +109,9 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		gateway,
 		identity,
 	)
+	app.SetFeishuAttention(FeishuAttentionRuntimeConfig{
+		MentionOnTurnCompletion: loadedConfig.Config.Feishu.Attention.TurnCompletionMentionEnabled(),
+	})
 	baseEnv := buildDaemonHeadlessBaseEnv(os.Environ(), capturedProxyEnv)
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
 		BinaryPath: identity.BinaryPath,

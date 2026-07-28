@@ -239,6 +239,9 @@ Wrapper 与 daemon 之间使用 canonical 协议（`agentproto`）通信，包�
   },
   "feishu": {
     "useSystemProxy": false,
+    "attention": {
+      "mentionOnTurnCompletion": true  // false：完成、失败、提案计划终态不再 @ 发起用户
+    },
     "apps": [                    // 飞书应用配置
       {
         "id": "main",

@@ -621,7 +621,8 @@ MCP request 卡片当前新增的可视语义：
   - daemon 当前会先在 `[]UIEvent` 批处理入口为原锚点事件打 attention annotation，不再追加独立 `UIEventTimelineText(type=attention_ping)`：
     - 这条提醒不是新的 owner-card / request-card substrate，而是原事件自身的 delivery annotation；若原事件未送达，或 `global runtime` notice 被节流 / suppress，则不会额外补发第二条 `@` 消息
     - request prompt started 命中 `approval` / `request_user_input` / `permissions_request_approval` / `mcp_server_elicitation` 时，当前按 `surface + request_id + revision` 只标注一次；inline rerender 不会重复标注；request dedupe 只在带 attention 的原 request 卡真正送达后记账，因此原 request 卡投递失败后的同 revision 重试仍可补发 attention。`tool_callback` 与 `unsupported_server_request` 当前不进入 attention policy，因为它们不等待用户处理
-    - turn 结束批次里，`turn_failed` 优先于 final；若同批既有 final 又有 `提案计划` 卡，则只把“本轮已结束且有提案待确认”的 attention 挂到 `提案计划` 卡上
+    - turn 结束批次里的 mention 由 `feishu.attention.mentionOnTurnCompletion` 控制，默认 `true` 保持既有行为；设为 `false` 后，final、`turn_failed` 与 `提案计划` 都不再携带 `@`，但 request prompt 和 targeted global runtime notice 的必要提醒不受影响
+    - 启用 turn completion mention 时，`turn_failed` 优先于 final；若同批既有 final 又有 `提案计划` 卡，则只把“本轮已结束且有提案待确认”的 attention 挂到 `提案计划` 卡上
     - `attached_instance_transport_degraded`、`gateway_apply_failure`、`daemon_shutting_down` 这三类 `global runtime` notice 当前也会把 attention 直接挂到原 notice card，并继续复用同一套 family + dedupe key + throttle window
     - 若原事件是 reply-chain（例如 final reply），attention 也跟随这张原消息 reply 到同一 anchor；若原事件本来是顶层 append（例如 request prompt、plan proposal、global runtime notice），attention 也保持顶层 append
     - mention 目标固定取当前 surface 的 `ActorUserID`；若当前 surface 没有可用 actor identity，则直接跳过 attention annotation，原事件照常投递
@@ -948,7 +949,7 @@ pending input 不是卡片 owner-flow，但它会直接改变用户消息上的 
 - [internal/app/daemon/app_global_runtime_notice_test.go](../../internal/app/daemon/app_global_runtime_notice_test.go)
   - 锁定 `global runtime` 提示维持独立 delivery lane，并按 family + dedupe key 做短窗节流 / pending queue 去重
 - [internal/app/daemon/app_attention_ping_test.go](../../internal/app/daemon/app_attention_ping_test.go)
-  - 锁定 request prompt / final reply / `turn_failed` / `提案计划` / targeted `global runtime` notice 的 attention annotation 归属规则、reply/append 跟随原事件位置的语义、request anchor 失败后不会错误消耗 dedupe 且重试仍可补发，以及 same-batch suppressed runtime notice 不会额外泄漏第二条消息
+  - 锁定 request prompt / final reply / `turn_failed` / `提案计划` / targeted `global runtime` notice 的 attention annotation 归属规则、reply/append 跟随原事件位置的语义、`mentionOnTurnCompletion=false` 只关闭 turn terminal mention 而保留 request attention、request anchor 失败后不会错误消耗 dedupe 且重试仍可补发，以及 same-batch suppressed runtime notice 不会额外泄漏第二条消息
 - [internal/app/daemon/app_menu_handoff_test.go](../../internal/app/daemon/app_menu_handoff_test.go)
   - 锁定 `/list` 在 `codex` / `claude` / `vscode` 三条菜单路径下都改走同卡 handoff；其中 Claude `/list` / `/use` 的 target picker 刷新与结果也会留在原菜单卡，vscode `/list` / `/use` / `/useall` 的空态、attach 结果与 `use_thread` 结果同样继续收口在原菜单卡；同时 `/help`、`/steerall`、`/compact`、`/sendfile` 会直接把菜单卡交给后续结果/owner/picker 卡继续收口，`/stop`、`/new`、`/follow`、`/workspace detach` 也会直接 seal 当前菜单卡
 - [internal/core/control/feishu_command_support_test.go](../../internal/core/control/feishu_command_support_test.go)
@@ -999,6 +1000,7 @@ pending input 不是卡片 owner-flow，但它会直接改变用户消息上的 
 9. `/history` 的 owner-card runtime 与 history 业务态是否仍保持单一真相源，而不是重新长回两套 owner lifecycle
 10. route / attach 上下文变化后，workspace page / target picker / path picker / history / review picker 这类旧卡是否仍会留下“看似可点、第一次点才报过期”的假活状态
 11. 普通输入立即派发时是否错误地重新投影 `QueueOn` 造成 `OneSecond -> THINKING` 闪动；真正等待队列的输入是否仍保留 `QueueOn`
+12. `feishu.attention.mentionOnTurnCompletion=false` 是否只关闭 final / failure / plan proposal 的 turn terminal mention，而没有误关 request prompt 或 targeted global runtime notice
 
 ## 待讨论取舍
 

@@ -33,6 +33,34 @@ func TestWriteAppConfigLeavesPprofDisabledByDefault(t *testing.T) {
 	}
 }
 
+func TestFeishuTurnCompletionMentionDefaultsOnAndCanBeDisabled(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := WriteAppConfig(configPath, AppConfig{}); err != nil {
+		t.Fatalf("WriteAppConfig(defaults): %v", err)
+	}
+
+	loaded, err := LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath(defaults): %v", err)
+	}
+	if !loaded.Config.Feishu.Attention.TurnCompletionMentionEnabled() {
+		t.Fatalf("expected omitted completion mention config to default on, got %#v", loaded.Config.Feishu.Attention)
+	}
+
+	disabled := false
+	loaded.Config.Feishu.Attention.MentionOnTurnCompletion = &disabled
+	if err := WriteAppConfig(configPath, loaded.Config); err != nil {
+		t.Fatalf("WriteAppConfig(disabled): %v", err)
+	}
+	loaded, err = LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath(disabled): %v", err)
+	}
+	if loaded.Config.Feishu.Attention.TurnCompletionMentionEnabled() {
+		t.Fatalf("expected explicit false to disable completion mention, got %#v", loaded.Config.Feishu.Attention)
+	}
+}
+
 func TestWriteAppConfigNormalizesEnabledPprofDefaults(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	cfg := DefaultAppConfig()

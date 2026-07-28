@@ -11,8 +11,8 @@ var embeddedUpgradeShim_darwin_arm64 []byte
 
 func init() {
 	register(Asset{
-		SourceDigest: "304e34417cf49a466bae1e621cbae57b07cc8ea96bab5dc0a18a0b8da6392883",
-		SHA256:       "be209704f6eed5229cda38cf7959fad9a887a02452a5a6453ee1750fa698085e",
+		SourceDigest: "50f7536dc418d30689b535724c2f0de057601b7e31bbe20fab9426f25b1831b5",
+		SHA256:       "b33685278ca89c4da9653557c1446c32ead3c515518beef163884e55ab9699ed",
 		Zstd:         embeddedUpgradeShim_darwin_arm64,
 	})
 }

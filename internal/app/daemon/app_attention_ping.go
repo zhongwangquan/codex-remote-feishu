@@ -127,6 +127,9 @@ func (a *App) turnAttentionAnnotationLocked(candidate *attentionTurnBatchCandida
 	if candidate == nil {
 		return eventcontract.AttentionAnnotation{}
 	}
+	if !a.feishuAttention.MentionOnTurnCompletion {
+		return eventcontract.AttentionAnnotation{}
+	}
 	surfaceID := strings.TrimSpace(candidate.anchorEvent.SurfaceSessionID)
 	if surfaceID == "" {
 		return eventcontract.AttentionAnnotation{}
