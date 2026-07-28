@@ -9,7 +9,7 @@ func tasksCommandSpec() feishuCommandSpec {
 			CanonicalSlash:   "/tasks",
 			CanonicalMenuKey: "tasks",
 			ArgumentKind:     FeishuCommandArgumentNone,
-			Description:      "汇总正在执行和排队中的任务，展示所属工作区与当前状态。",
+			Description:      "按工作区汇总正在执行和排队中的任务，展示 Codex 会话标题与当前状态。",
 			ShowInHelp:       true,
 			ShowInMenu:       true,
 		},

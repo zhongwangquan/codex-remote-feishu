@@ -1047,6 +1047,19 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    2. 同样的命令如果由 slash 文本或飞书后台 bot 菜单触发，仍按普通 append-only UIEvent 新发卡片
    3. `/help`、result/notice 类卡片不参与这条导航替换语义
 
+### 4.15.1 `/tasks` 是按 workspace 聚合的 thread-level 只读投影
+
+当前 `/tasks` 不创建新的 queue / dispatch 状态，也不改变任何 surface route；它只读取所有 surface 的 active queue item 与 queued item，并投影为当前工作任务列表。
+
+当前行为已经固定为：
+
+1. 任务身份优先使用 queue item 冻结执行计划里的 `ExecutionThreadID`，并从 attached instance 的 `ThreadRecord` 读取 Codex 会话标题。
+2. 若对应 thread 暂时不可解析或仍未命名，才回退到 source / reply message preview 或自动任务类型标签；因此“当前状态”“继续”这类本轮输入不再覆盖已经存在的 Codex 任务标题。
+3. 同一 `workspace + execution thread` 只展示一个任务；同一 thread 同时存在 active 与 queued item 时，active 状态优先，避免一条 Codex 任务因后续排队消息重复出现。
+4. 结果先按 workspace 分组，同一 workspace 下允许并列多个正在执行或排队中的 Codex 任务。
+5. 投影最多展开 50 个去重后的任务；workspace 与任务标题都限制为 40 个 rune，超出任务只展示剩余数量。最坏 50 个 workspace 时约产生 100 个正文元素，低于当前 Feishu 卡片 200 element / 30 KB 基线。
+6. workspace 与任务标题属于动态文本，只进入 `FeishuCardTextSection.Lines` 并由 adapter 渲染为 `plain_text`；section label 只使用固定系统文案，动态值不得进入 raw markdown。
+
 ### 4.16 autowhip 调度只允许走显式 reply-anchor，不再伪造用户消息 pending/typing
 
 当前 autowhip queue item 仍沿用显式来源类型：
@@ -1657,6 +1670,7 @@ transport degraded retained attachment
 | 请求按钮 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 理论上通常不会出现；若出现仍按 attached surface 处理 |
 | `/stop` | 通常无效果 | 通常无效果 | 允许 | 允许 | 允许 | 允许；可清掉 staged/queued draft |
 | `/status` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
+| `/tasks` | 允许；只读汇总所有 surface 的 active/queued thread | 允许；只读汇总所有 surface 的 active/queued thread | 允许；只读汇总所有 surface 的 active/queued thread | 允许；只读汇总所有 surface 的 active/queued thread | 允许；只读汇总所有 surface 的 active/queued thread | 允许；只读汇总所有 surface 的 active/queued thread |
 | `/detach` | 允许但通常只提示已 detached；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；dispatching/running 时走 abandoning；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias |
 | bare `/mode` / bare `/autowhip` / bare `/autocontinue` | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
 | bare `/model` `/reasoning` `/access` | 允许，但 detached 时只回恢复/参数卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
@@ -1866,6 +1880,7 @@ retained-offline overlay 额外规则：
 11. Codex dispatch guard 是否只丢弃“目录已知且明确不兼容”的 reasoning override，并且不误伤 unknown/manual model、Claude launch contract 或 model/access override。
 12. Feishu room workspace 切换是否仍只在真正 destructive workspace change 前触发，且当前 surface blocker、同 room unsafe blocker、管理员校验、sibling reset、最终 binding 写入保持同一顺序；普通同 workspace `/use` / session 选择不能调用管理员 API。
 13. prompt-dispatch watchdog 是否仍从真实 `prompt.send` command bind 开始计时、在 `turn.started` 后立即失效、对同一 queue item 只切一次，并在兜底 turn terminal 后回到标准 managed headless；Feishu notice 失败不能阻塞 daemon kill/start。
+14. `/tasks` 是否仍以 `workspace + execution thread` 作为任务身份、active 优先于同 thread queued item，并保持只读、50 任务容量降级与动态文本 `plain_text` 边界。
 
 ## 11. 待讨论取舍
 

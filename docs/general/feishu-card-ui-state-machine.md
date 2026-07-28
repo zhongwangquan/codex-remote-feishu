@@ -62,8 +62,8 @@
     - `inline_view`：命中 `SupportsFeishuSynchronousCurrentCardReplacement(action)` 且首个事件显式 `InlineReplaceCurrentCard`
     - `first_result_card`：命中同一同步条件后，从事件流里挑首张可投影卡直接作为 `ReplaceCurrentCard`；`inline_view` 严格命中失败时也允许回退到这条首结果替换
     - active picker 阻断保护：若事件流是 `path_picker_active` / `target_picker_processing` 这类阻断 notice，daemon 会保持当前卡不替换，避免把活跃 owner 子步骤误封成终态
-  - 命令菜单 launcher 的 handoff 当前也统一读取 `ResolveFeishuFrontstageActionContract(action).LauncherDisposition`：`keep` 保留菜单导航/配置页，`enter_terminal` 当前用于 stamped `/help`、`/status`，其余 stamped launcher 动作默认 `enter_owner`
-  - `ResolveFeishuFrontstageActionContract(action)` 里的 `ContinuationDaemonCommand` 与 `FollowupPolicy` 现在也优先从 `FeishuCommandBinding` 读取：`/debug`、`/cron`、`/upgrade`、`/vscode-migrate` 的首结果卡续接 daemon command，以及 `/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`、`/workspace detach` 这组命令的 followup drop 策略，不再分别散落在 lifecycle switch 里
+  - 命令菜单 launcher 的 handoff 当前也统一读取 `ResolveFeishuFrontstageActionContract(action).LauncherDisposition`：`keep` 保留菜单导航/配置页，`enter_terminal` 当前用于 stamped `/help`、`/status`、`/tasks`，其余 stamped launcher 动作默认 `enter_owner`
+  - `ResolveFeishuFrontstageActionContract(action)` 里的 `ContinuationDaemonCommand` 与 `FollowupPolicy` 现在也优先从 `FeishuCommandBinding` 读取：`/debug`、`/cron`、`/upgrade`、`/vscode-migrate` 的首结果卡续接 daemon command，以及 `/help`、`/status`、`/tasks`、`/stop`、`/new`、`/follow`、`/detach`、`/workspace detach` 这组命令的 followup drop 策略，不再分别散落在 lifecycle switch 里
   - 未打标的 `FeishuUIIntent` card callback 当前会在 ingress lifecycle gate 直接判成 expired old-card，不再保留“异步继续执行但不做同步 replace”的 compat 路径
   - 旧 bare continuation / command submission anchor 当前已退出 live 路径，不再承接 stamped current-card 回调
 - `orchestrator / Feishu UI controller`
@@ -120,7 +120,7 @@
 | `/mcpoauth <server>` / `/mcp-oauth <server>` | `daemon-command + append-only notice` | 文本命令解析成 `ActionMCPOAuthCommand`，再通过 `DaemonCommandMCPOAuthLogin` 发起 `mcpServer/oauth/login`。这条链路没有 Feishu card callback payload、没有 current-card replace、没有 request revision，也不占用 `G2 PendingRequest`；daemon 只把 command id 记为 pending OAuth flow，URL-ready 与 completed/error 都向发起 surface append 普通 notice。授权链接一次性展示完整 URL，完成/失败再发一条终态 notice；不会为了打字机效果频繁 patch 卡片 |
 | bare `/compact` | `mixed` | 文本入口当前会先由 orchestrator 建立 compact owner-card flow，并 append 一张 patchable direct-command card；若入口来自 stamped `/menu current_work` 卡，则当前菜单卡会直接被绑定成 compact owner card。dispatching / running / completed / failed 都继续 patch 同一张卡。被动 compact completion 不复用这条前台 owner card；quiet 静默，normal/verbose 则继续并入共享过程卡 |
 | bare `/bendtomywill` / stamped `/menu common_tools -> /bendtomywill` | `mixed` | 文本或菜单入口当前都先走 daemon-side patch flow runtime：打开时会读取当前 attached thread 的 latest completed assistant turn 预览，并命中 refusal / placeholder 候选后生成一张 `request_user_input` 风格的多题 patch 卡。逐题回答时同一张卡会按 `request_revision` inline replace；全部题目完成后当前卡会切到 patchable progress page，随后 success / failure / rollback 结果继续 patch 同一张卡。若首卡还没有 `message_id`，runtime 会先用 `TrackingKey=flow_id` append，再在 gateway 分配 `message_id` 后回写；最近一次回滚按钮则通过 `page_action(ActionTurnPatchRollback, patch_id)` 继续收口到同一张卡。旧卡、他人点击、busy / VS Code / detached 拒绝，以及候选点不存在等路径，若入口来自 stamped 当前卡，会优先走 page-result replacement 收口，否则继续 append-only notice |
-| stamped `/menu maintenance -> /help` / `/status` | `launcher -> terminal` | 点击后 daemon 会把 handler 的首个结果卡（帮助目录或 snapshot 状态卡）直接 `ReplaceCurrentCard`，同时把 `command_menu` launcher flow 标记为 terminal/已退出。纯文本 `/help` / `/status` 仍保持 append-only |
+| stamped `/menu maintenance -> /help` / `/status` / `/tasks` | `launcher -> terminal` | 点击后 daemon 会把 handler 的首个结果卡（帮助目录、snapshot 状态卡或按工作区聚合的任务卡）直接 `ReplaceCurrentCard`，同时把 `command_menu` launcher flow 标记为 terminal/已退出。纯文本 `/help` / `/status` / `/tasks` 仍保持 append-only；`/tasks` 卡只读展示去重后的 Codex thread 标题及 active/queued 状态 |
 | bare `/admin` / stamped `/menu maintenance -> /admin` | `launcher -> owner` | bare `/admin` 当前会直接打开系统管理根页；若从菜单 handoff 进入，则当前菜单卡会同位替成 `/admin` 根页，并通过 breadcrumb/related button 保留 `返回菜单`。该根页当前显式暴露 `管理页外链`、`本地管理页` 两条入口，并只在 Linux/macOS 暴露 `自动启动`；`/admin web`、`/admin localweb` 与 `/admin autostart...` 的继续执行则分别进入 daemon command 路径。Windows 下 `/admin autostart` 不会在根页显示，但用户手动输入时仍会收到 unsupported/状态反馈，而不是静默吞掉 |
 | stamped `/menu 首页 -> 工作会话` 与后续 `/workspace` / `/workspace new` / `/workspace list` / `/workspace new dir` / `/workspace new git` / `/workspace new worktree` | `launcher -> owner` | `codex headless` 下从菜单首页点 `工作会话` 会先把原菜单卡替成 bare `/workspace` 父页；该父页当前直接显示 `切换 / 从目录新建 / 从 GIT URL 新建 / 从 Worktree 新建 / 解除接管`，`/workspace new` 子页也继续保留三条新建入口。workspace page owner runtime 现在会显式记录 handoff 来源卡的 `message_id` 与 `from_menu`，而 target-picker owner runtime 会继续保存一份结构化父页 back payload；因此从这些父页继续进入目录/Git/worktree 业务卡时，子卡 footer 的 `返回上一层` 会稳定回到父页或菜单，不再依赖命令字符串重放或退化到内部 no-op。该路径当前通过显式 `launcher -> owner` handoff 进入业务卡，不再依赖旧 `MenuFlow` 长驻语义。旧 alias `/list` / `/use` / `/useall` 直接输入时也会落到相同业务卡，但不再作为菜单主展示 |
 | stamped `/menu current_work|switch_target -> /stop` / `/new` / `/follow` / `/workspace detach` | `launcher -> terminal` | 点击后 daemon 会把 handler 返回的首个 notice / thread-selection 结果卡直接作为 `ReplaceCurrentCard`，并抑制重复终态 append。菜单 launcher flow 在 handoff 后立即退出，不再保留“半菜单半业务”活跃态 |
@@ -573,13 +573,22 @@ MCP request 卡片当前新增的可视语义：
   - 若这些路径在准备阶段失败，失败态也会封回同一张 owner card，而不是再额外发一张 notice 卡作为主承载
   - `/history` loading / error 当前也改成同一套前台卡 contract：摘要和当前列表/详情上下文会保留在业务区，读取中与错误信息进入 notice 区，而不是把主区提前 return 掉
 
+### 5.2.1 `/tasks` 使用 sealed terminal page 投影
+
+`/tasks` 当前复用结构化 `FeishuPageView.BodySections`，但不会建立新的 owner-flow：
+
+- stamped 菜单入口沿 `enter_terminal` 把首张任务卡替换到当前菜单卡；纯文本 `/tasks` 仍 append 一张 sealed 只读卡
+- 卡片先按 workspace 分组，再在每个 workspace 下展示多个 Codex thread 标题与状态；同一 `workspace + thread` 只展示一次
+- `Label` 只使用 `工作区` / `更多任务` 这类固定系统文案；动态 workspace、thread title 与状态内容全部位于 `Lines`，最终由 adapter 投影为 `plain_text`
+- 单卡最多展开 50 个任务；任务超出时使用固定 overflow section 展示剩余数量，保证最坏 element 数与 payload 仍在 Feishu hard limits 内
+
 ### 5.3 当前明确保持 append-only 的动作
 
 下面这些动作即使来自卡片，也不会同步 replace 当前卡：
 
 - `path_picker_confirm` / `path_picker_cancel`；它们虽然也先走 `FeishuUIIntent`，但不命中 `CurrentCardMode=inline_view` 的动作集合，gateway 会立即 ack 并异步处理；当前默认终态会 sealed 回当前 picker 卡，target picker owner-flow 子步骤会 patch 回原 owner card，独立 `/sendfile` picker 的 cancel / 启动前失败 / 启动成功终态也会 patch 回当前 picker 卡。真正仍保持独立 append-only 的只剩 freshness/ownership 拒绝，或 consumer 主动返回新的 follow-up 可见项
 - attach 这类真正改变产品状态且不属于当前菜单原卡规则的动作
-- 纯文本 slash 的 `/help`、`/status`、`/stop`、`/new`、`/follow`、`/detach`；它们不会把普通文本入口升级成 replace
+- 纯文本 slash 的 `/help`、`/status`、`/tasks`、`/stop`、`/new`、`/follow`、`/detach`；它们不会把普通文本入口升级成 replace
 - request 的最终 dispatch 结果，以及 notice-only 的 request invalid / request expired 处理结果
 - 各类 notice、final reply、补充预览、状态类卡片
 
@@ -591,7 +600,7 @@ MCP request 卡片当前新增的可视语义：
   - 校验失败、参数格式错误、或仍未接管目标等前置条件失败，会继续留在同一张参数卡上，保留可重试表单；必要时把刚才输入的参数回填到默认值
   - 若动作不是从当前参数卡 callback 进入，例如用户直接发送 `/mode vscode`、`/autowhip on`、`/autocontinue on`，则仍保持 append-only，不会把普通文本 slash 升级成 inline replace
 - stamped 菜单命令里的非 inline 命令当前分成几类：
-  - `/help`、`/status` 会直接把首个结果卡替成当前菜单卡；不再 append 一张脱离原卡的帮助卡/状态卡
+  - `/help`、`/status`、`/tasks` 会直接把首个结果卡替成当前菜单卡；不再 append 一张脱离原卡的帮助卡/状态卡/任务卡
   - `/list`、`/use`、`/useall` 会直接把首个实例列表 / 线程列表 / 提示 / 结果卡替成当前菜单卡；不再回退到 submission anchor。`/list` attach 成功后若同一事件流里还带 thread-selection follow-up，daemon 也会抑制这张重复卡
   - `/stop`、`/new`、`/follow`、`/workspace detach` 会把首个 notice / thread-selection 结果卡直接作为当前菜单卡；不再走 submission anchor，也不再 recall
   - `/compact`、`/steerall`、`/sendfile` 的 `current_work` 菜单入口不再复用锚点路径，而是直接把原菜单卡交给 owner/terminal card 流继续收口
@@ -833,6 +842,7 @@ pending input 不是卡片 owner-flow，但它会直接改变用户消息上的 
 - [internal/core/orchestrator/service_target_picker.go](../../internal/core/orchestrator/service_target_picker.go)
 - [internal/core/orchestrator/service_path_picker.go](../../internal/core/orchestrator/service_path_picker.go)
 - [internal/core/orchestrator/service_feishu_command_view.go](../../internal/core/orchestrator/service_feishu_command_view.go)
+- [internal/core/orchestrator/service_tasks.go](../../internal/core/orchestrator/service_tasks.go)
 - [internal/core/orchestrator/service_surface_selection.go](../../internal/core/orchestrator/service_surface_selection.go)
 - [internal/core/orchestrator/service_surface_thread_selection.go](../../internal/core/orchestrator/service_surface_thread_selection.go)
 - [internal/app/daemon/app_ingress.go](../../internal/app/daemon/app_ingress.go)
@@ -940,6 +950,10 @@ pending input 不是卡片 owner-flow，但它会直接改变用户消息上的 
   - 锁定 `/menu` 首页不会再从 `/menu` 命令定义隐式继承 maintenance breadcrumb / back button，首页分组按钮文案直接复用分组标题
 - [internal/adapter/feishu/projector_command_catalog_test.go](../../internal/adapter/feishu/projector_command_catalog_test.go)
   - 锁定 `/menu` 首页投影结果只显示根 breadcrumb `菜单首页`，并把每个分组渲染成同名按钮
+- [internal/core/orchestrator/service_tasks_test.go](../../internal/core/orchestrator/service_tasks_test.go)
+  - 锁定 `/tasks` 使用 Codex thread title、按 workspace 聚合多个任务、同 thread active/queued 去重，以及 50 个任务后的 overflow 降级
+- [internal/adapter/feishu/projector_tasks_plaintext_test.go](../../internal/adapter/feishu/projector_tasks_plaintext_test.go)
+  - 锁定 `/tasks` 的动态 workspace 与 thread title 只进入 `plain_text`，不会泄漏到 raw markdown
 - [internal/core/orchestrator/service_command_card_test.go](../../internal/core/orchestrator/service_command_card_test.go)
   - 锁定参数卡 apply 的同卡收口边界：成功 / no-op 封成 sealed terminal card、格式错误保留同卡重试、未接管目标时回到同卡恢复态
 - [internal/app/daemon/app_test.go](../../internal/app/daemon/app_test.go)
@@ -1001,6 +1015,7 @@ pending input 不是卡片 owner-flow，但它会直接改变用户消息上的 
 10. route / attach 上下文变化后，workspace page / target picker / path picker / history / review picker 这类旧卡是否仍会留下“看似可点、第一次点才报过期”的假活状态
 11. 普通输入立即派发时是否错误地重新投影 `QueueOn` 造成 `OneSecond -> THINKING` 闪动；真正等待队列的输入是否仍保留 `QueueOn`
 12. `feishu.attention.mentionOnTurnCompletion` 默认关闭时是否只影响 final / failure / plan proposal；显式开启时是否只恢复这三类 turn terminal mention，而没有改变 request prompt 或 targeted global runtime notice
+13. `/tasks` 是否仍把 workspace/thread 动态值限制在 `plain_text`，并在 50 任务上限后使用 overflow section，而不是继续向单卡无限追加 element
 
 ## 待讨论取舍
 

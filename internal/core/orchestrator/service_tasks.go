@@ -9,18 +9,34 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/threadtitle"
 )
+
+const workingTaskCardMaxTasks = 50
 
 type workingTaskSummary struct {
 	WorkspaceKey string
+	TaskKey      string
 	TaskTitle    string
 	Status       state.QueueItemStatus
 	QueueOrder   int
 }
 
+type workingTaskWorkspaceGroup struct {
+	WorkspaceKey string
+	Tasks        []workingTaskSummary
+}
+
 func (s *Service) tasksTerminalPageEvent(surface *state.SurfaceConsoleRecord) eventcontract.Event {
 	tasks := s.workingTaskSummaries()
-	sections := make([]control.FeishuCardTextSection, 0, len(tasks)+1)
+	visibleTasks := tasks
+	hiddenTaskCount := 0
+	if len(visibleTasks) > workingTaskCardMaxTasks {
+		hiddenTaskCount = len(visibleTasks) - workingTaskCardMaxTasks
+		visibleTasks = visibleTasks[:workingTaskCardMaxTasks]
+	}
+	groups := groupWorkingTaskSummaries(visibleTasks)
+	sections := make([]control.FeishuCardTextSection, 0, len(groups)+2)
 	if len(tasks) == 0 {
 		sections = append(sections, control.FeishuCardTextSection{
 			Lines: []string{"当前没有正在执行或排队中的任务。"},
@@ -29,13 +45,23 @@ func (s *Service) tasksTerminalPageEvent(surface *state.SurfaceConsoleRecord) ev
 		sections = append(sections, control.FeishuCardTextSection{
 			Lines: []string{fmt.Sprintf("共 %d 个正在工作或等待执行的任务。", len(tasks))},
 		})
-		for _, task := range tasks {
+		for _, group := range groups {
+			lines := []string{previewSnippet(workspaceSelectionLabel(group.WorkspaceKey))}
+			for _, task := range group.Tasks {
+				lines = append(lines,
+					"• "+firstNonEmpty(strings.TrimSpace(task.TaskTitle), "未命名任务"),
+					"  状态："+workingTaskStatusLabel(task.Status, task.QueueOrder),
+				)
+			}
 			sections = append(sections, control.FeishuCardTextSection{
-				Label: workspaceSelectionLabel(task.WorkspaceKey),
-				Lines: []string{
-					"状态：" + workingTaskStatusLabel(task.Status, task.QueueOrder),
-					"任务：" + firstNonEmpty(strings.TrimSpace(task.TaskTitle), "未命名任务"),
-				},
+				Label: "工作区",
+				Lines: lines,
+			})
+		}
+		if hiddenTaskCount > 0 {
+			sections = append(sections, control.FeishuCardTextSection{
+				Label: "更多任务",
+				Lines: []string{fmt.Sprintf("另有 %d 个任务未展开。", hiddenTaskCount)},
 			})
 		}
 	}
@@ -67,7 +93,8 @@ func (s *Service) workingTaskSummaries() []workingTaskSummary {
 		if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil {
 			tasks = append(tasks, workingTaskSummary{
 				WorkspaceKey: workspaceKey,
-				TaskTitle:    workingTaskTitle(item),
+				TaskKey:      workingTaskKey(item),
+				TaskTitle:    s.workingTaskTitle(surface, item),
 				Status:       item.Status,
 			})
 		}
@@ -78,25 +105,29 @@ func (s *Service) workingTaskSummaries() []workingTaskSummary {
 			}
 			tasks = append(tasks, workingTaskSummary{
 				WorkspaceKey: workspaceKey,
-				TaskTitle:    workingTaskTitle(item),
+				TaskKey:      workingTaskKey(item),
+				TaskTitle:    s.workingTaskTitle(surface, item),
 				Status:       state.QueueItemQueued,
 				QueueOrder:   index + 1,
 			})
 		}
 	}
 	sort.SliceStable(tasks, func(i, j int) bool {
+		if tasks[i].WorkspaceKey != tasks[j].WorkspaceKey {
+			return tasks[i].WorkspaceKey < tasks[j].WorkspaceKey
+		}
 		if tasks[i].Status == state.QueueItemQueued && tasks[j].Status != state.QueueItemQueued {
 			return false
 		}
 		if tasks[i].Status != state.QueueItemQueued && tasks[j].Status == state.QueueItemQueued {
 			return true
 		}
-		if tasks[i].WorkspaceKey == tasks[j].WorkspaceKey {
+		if tasks[i].QueueOrder != tasks[j].QueueOrder {
 			return tasks[i].QueueOrder < tasks[j].QueueOrder
 		}
-		return tasks[i].WorkspaceKey < tasks[j].WorkspaceKey
+		return tasks[i].TaskKey < tasks[j].TaskKey
 	})
-	return tasks
+	return dedupeWorkingTaskSummaries(tasks)
 }
 
 func (s *Service) workingTaskWorkspaceKey(surface *state.SurfaceConsoleRecord) string {
@@ -109,15 +140,63 @@ func (s *Service) workingTaskWorkspaceKey(surface *state.SurfaceConsoleRecord) s
 	return firstNonEmpty(strings.TrimSpace(surface.ClaimedWorkspaceKey), "未关联工作区")
 }
 
-func workingTaskTitle(item *state.QueueItemRecord) string {
+func (s *Service) workingTaskTitle(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord) string {
 	if item == nil {
 		return ""
 	}
+	if surface != nil {
+		if inst := s.root.Instances[surface.AttachedInstanceID]; inst != nil {
+			if thread := inst.Threads[queuedItemExecutionThreadID(item)]; thread != nil {
+				if title := threadtitle.DisplayBody(thread, threadtitle.DefaultDisplayLimit); title != threadtitle.UnnamedDisplayName {
+					return title
+				}
+			}
+		}
+	}
 	return firstNonEmpty(
-		strings.TrimSpace(item.SourceMessagePreview),
-		strings.TrimSpace(item.ReplyToMessagePreview),
+		previewSnippet(item.SourceMessagePreview),
+		previewSnippet(item.ReplyToMessagePreview),
 		workingTaskSourceLabel(item.SourceKind),
 	)
+}
+
+func workingTaskKey(item *state.QueueItemRecord) string {
+	if item == nil {
+		return ""
+	}
+	return firstNonEmpty(queuedItemExecutionThreadID(item), strings.TrimSpace(item.ID))
+}
+
+func dedupeWorkingTaskSummaries(tasks []workingTaskSummary) []workingTaskSummary {
+	if len(tasks) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(tasks))
+	out := make([]workingTaskSummary, 0, len(tasks))
+	for _, task := range tasks {
+		key := strings.TrimSpace(task.WorkspaceKey) + "\x00" + strings.TrimSpace(task.TaskKey)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, task)
+	}
+	return out
+}
+
+func groupWorkingTaskSummaries(tasks []workingTaskSummary) []workingTaskWorkspaceGroup {
+	if len(tasks) == 0 {
+		return nil
+	}
+	groups := make([]workingTaskWorkspaceGroup, 0, len(tasks))
+	for _, task := range tasks {
+		if len(groups) == 0 || groups[len(groups)-1].WorkspaceKey != task.WorkspaceKey {
+			groups = append(groups, workingTaskWorkspaceGroup{WorkspaceKey: task.WorkspaceKey})
+		}
+		group := &groups[len(groups)-1]
+		group.Tasks = append(group.Tasks, task)
+	}
+	return groups
 }
 
 func workingTaskSourceLabel(kind state.QueueItemSourceKind) string {
