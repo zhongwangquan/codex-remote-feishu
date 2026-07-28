@@ -468,7 +468,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			CanonicalSlash:   "/workspace",
 			CanonicalMenuKey: "workspace",
 			ArgumentKind:     FeishuCommandArgumentNone,
-			Description:      "打开 headless 模式的工作区与会话主页，里面提供切换、从目录新建、从 GIT URL 新建、从 Worktree 新建、解除接管。",
+			Description:      "打开 headless 模式的工作区与会话主页，里面提供切换、工作任务、从目录新建、从 GIT URL 新建、从 Worktree 新建、解除接管。",
 			ShowInHelp:       true,
 			ShowInMenu:       true,
 		},

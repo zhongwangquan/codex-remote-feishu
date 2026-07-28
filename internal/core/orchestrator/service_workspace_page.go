@@ -27,6 +27,28 @@ func (s *Service) clearWorkspacePageRuntime(surface *state.SurfaceConsoleRecord)
 	s.clearSurfaceWorkspacePage(surface)
 }
 
+func (s *Service) completeWorkspacePageTerminal(surface *state.SurfaceConsoleRecord, sourceMessageID string) *activeOwnerCardFlowRecord {
+	record := s.activeWorkspacePage(surface)
+	flow := s.activeOwnerCardFlow(surface)
+	if surface == nil || record == nil || flow == nil || flow.Kind != ownerCardFlowKindWorkspacePage {
+		return nil
+	}
+	if strings.TrimSpace(flow.FlowID) == "" || strings.TrimSpace(flow.FlowID) != strings.TrimSpace(record.FlowID) {
+		return nil
+	}
+	sourceMessageID = strings.TrimSpace(sourceMessageID)
+	if messageID := strings.TrimSpace(record.MessageID); messageID != "" && sourceMessageID != messageID {
+		return nil
+	}
+	flow.Role = frontstageFlowRoleOwner
+	flow.Phase = ownerCardFlowPhaseCompleted
+	flow.CreatedAt = s.now()
+	flow.ExpiresAt = flow.CreatedAt.Add(defaultTargetPickerTTL)
+	bumpOwnerCardFlowRevision(flow)
+	s.clearWorkspacePageRuntime(surface)
+	return flow
+}
+
 func (s *Service) workspacePageParentPayload(surface *state.SurfaceConsoleRecord, sourceMessageID string) map[string]any {
 	sourceMessageID = strings.TrimSpace(sourceMessageID)
 	if sourceMessageID == "" {

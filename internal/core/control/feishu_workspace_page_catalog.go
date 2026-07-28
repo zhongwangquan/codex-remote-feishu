@@ -12,6 +12,7 @@ func BuildFeishuWorkspaceRootPageView(inMenu bool) FeishuPageView {
 		Sections: []CommandCatalogSection{{
 			Entries: workspacePageEntries(
 				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceList, Label: "切换"},
+				workspacePageEntrySpec{CommandID: FeishuCommandTasks},
 				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewDir},
 				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewGit},
 				workspacePageEntrySpec{CommandID: FeishuCommandWorkspaceNewWorktree},

@@ -301,7 +301,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		case control.ActionStatus:
 			return s.filterEventsForSurfaceVisibility([]eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}})
 		case control.ActionTasks:
-			return s.filterEventsForSurfaceVisibility([]eventcontract.Event{s.tasksTerminalPageEvent(surface)})
+			return s.filterEventsForSurfaceVisibility([]eventcontract.Event{s.tasksTerminalPageEvent(surface, action)})
 		case control.ActionAutoWhipCommand:
 			return s.filterEventsForSurfaceVisibility(s.handleAutoWhipCommand(surface, action))
 		case control.ActionAutoContinueCommand:
@@ -475,7 +475,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		s.markCommandLauncherTerminal(surface)
 		events = []eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}}
 	case control.ActionTasks:
-		events = []eventcontract.Event{s.tasksTerminalPageEvent(surface)}
+		events = []eventcontract.Event{s.tasksTerminalPageEvent(surface, action)}
 	case control.ActionDetach:
 		events = s.detach(surface)
 	default:

@@ -1,8 +1,8 @@
 # 飞书菜单卡使用规约
 
 > Type: `general`
-> Updated: `2026-05-03`
-> Summary: 固化菜单卡的 launcher/owner/terminal 契约、页面本地导航 callback substrate 与扩展清单，禁止回退到旧菜单基座或半菜单半业务混合实现。
+> Updated: `2026-07-28`
+> Summary: 固化菜单卡的 launcher/owner/terminal 契约、页面本地导航 callback substrate 与扩展清单；工作会话父页里的“工作任务”复用现有 `/tasks` terminal handoff，禁止回退到旧菜单基座或半菜单半业务混合实现。
 
 ## 1. 文档定位
 
@@ -82,6 +82,13 @@
    - 必要时补对应业务 owner card 测试（例如 workspace/picker/history 等）
 
 未同时满足以上四项，不应合并。
+
+当前 `codex/claude headless` 的“工作区与会话”父页里，“工作任务”入口的固定合同是：
+
+- action：复用 `ActionTasks` / `/tasks`
+- contract：`enter_terminal`
+- handoff：首张 sealed 任务结果卡 `ReplaceCurrentCard`，同时结束并清掉当前 `workspace_page` owner runtime；不 append 第二张卡，也不建立新的 workspace/picker owner
+- 容量预算：父页固定为 6 个紧凑入口按钮，菜单来源时至多再带 1 个返回 footer；本次只增加 1 个固定组件，不引入动态增长，任务卡自身继续执行 50 条任务上限与 overflow 降级
 
 ## 7. 变更评审最小核对项
 

@@ -53,6 +53,63 @@ func TestHandleGatewayActionReplacesMenuCardForListHandoffInNormalMode(t *testin
 	}
 }
 
+func TestHandleGatewayActionReplacesWorkspaceMenuCardForTasksTerminalHandoff(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 7, 28, 14, 0, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+
+	workspaceResult := handleGatewayActionForTest(context.Background(), app, control.Action{
+		Kind:             control.ActionWorkspaceRoot,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-workspace-menu-1",
+		Text:             "/workspace",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if workspaceResult == nil || workspaceResult.ReplaceCurrentCard == nil {
+		t.Fatalf("expected workspace root replacement result, got %#v", workspaceResult)
+	}
+	if !operationHasActionValue(*workspaceResult.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionTasks)) {
+		t.Fatalf("expected workspace root to expose local /tasks handoff, got %#v", workspaceResult.ReplaceCurrentCard.CardElements)
+	}
+
+	tasksResult := handleGatewayActionForTest(context.Background(), app, control.Action{
+		Kind:             control.ActionTasks,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-workspace-menu-1",
+		Text:             "/tasks",
+		LocalPageAction:  true,
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if tasksResult == nil || tasksResult.ReplaceCurrentCard == nil {
+		t.Fatalf("expected tasks terminal replacement result, got %#v", tasksResult)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+	if tasksResult.ReplaceCurrentCard.CardTitle != "工作任务" {
+		t.Fatalf("unexpected tasks replacement card title: %#v", tasksResult.ReplaceCurrentCard)
+	}
+	if len(operationCardButtons(*tasksResult.ReplaceCurrentCard)) != 0 {
+		t.Fatalf("expected sealed tasks result without active buttons, got %#v", tasksResult.ReplaceCurrentCard.CardElements)
+	}
+	if summary := app.service.SurfaceUIRuntimeSummary("surface-1"); summary.ActiveWorkspacePageID != "" || summary.ActiveOwnerCardFlowID != "" {
+		t.Fatalf("expected tasks terminal handoff to clear workspace page runtime, got %#v", summary)
+	}
+}
+
 func TestHandleGatewayActionWorkspaceMenuFlowKeepsParentBackNavigation(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{

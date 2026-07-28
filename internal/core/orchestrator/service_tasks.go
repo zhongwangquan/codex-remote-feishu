@@ -27,7 +27,7 @@ type workingTaskWorkspaceGroup struct {
 	Tasks        []workingTaskSummary
 }
 
-func (s *Service) tasksTerminalPageEvent(surface *state.SurfaceConsoleRecord) eventcontract.Event {
+func (s *Service) tasksTerminalPageEvent(surface *state.SurfaceConsoleRecord, action control.Action) eventcontract.Event {
 	tasks := s.workingTaskSummaries()
 	visibleTasks := tasks
 	hiddenTaskCount := 0
@@ -79,6 +79,10 @@ func (s *Service) tasksTerminalPageEvent(surface *state.SurfaceConsoleRecord) ev
 	})
 	if flow := s.markCommandLauncherTerminal(surface); flow != nil {
 		page.TrackingKey = strings.TrimSpace(flow.FlowID)
+	} else if action.LocalPageAction {
+		if flow := s.completeWorkspacePageTerminal(surface, action.MessageID); flow != nil {
+			page.TrackingKey = strings.TrimSpace(flow.FlowID)
+		}
 	}
 	return s.pageEvent(surface, control.NormalizeFeishuPageView(page))
 }

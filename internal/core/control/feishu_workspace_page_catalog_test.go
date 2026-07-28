@@ -10,6 +10,7 @@ func TestBuildFeishuWorkspaceRootPageViewUsesCanonicalCommandDefinitions(t *test
 	page := BuildFeishuWorkspaceRootPageView(false)
 	if got, want := pageEntryCommands(page), []string{
 		canonicalSlashForTest(t, FeishuCommandWorkspaceList),
+		canonicalSlashForTest(t, FeishuCommandTasks),
 		canonicalSlashForTest(t, FeishuCommandWorkspaceNewDir),
 		canonicalSlashForTest(t, FeishuCommandWorkspaceNewGit),
 		canonicalSlashForTest(t, FeishuCommandWorkspaceNewWorktree),

@@ -156,7 +156,7 @@ func TestTasksCommandCapsLargeTaskLists(t *testing.T) {
 		}
 	}
 
-	page := commandCatalogFromEvent(t, svc.tasksTerminalPageEvent(nil))
+	page := commandCatalogFromEvent(t, svc.tasksTerminalPageEvent(nil, control.Action{}))
 	sections := control.BuildFeishuPageBodySections(*page)
 	if len(sections) != workingTaskCardMaxTasks+2 {
 		t.Fatalf("tasks sections = %d, want summary + %d workspace groups + overflow", len(sections), workingTaskCardMaxTasks)
