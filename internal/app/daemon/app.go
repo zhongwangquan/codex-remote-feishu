@@ -209,7 +209,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		pendingGlobalRuntimeNotices: map[string][]eventcontract.Event{},
 		recentGlobalRuntimeNotices:  map[string]map[string]time.Time{},
 		feishuAttention: FeishuAttentionRuntimeConfig{
-			MentionOnTurnCompletion: true,
+			MentionOnTurnCompletion: false,
 		},
 		managedHeadlessRuntime:      headlessruntime.NewState(),
 		claudeWorkspaceProfileState: claudeWorkspaceProfileRuntimeState{},

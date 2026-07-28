@@ -126,7 +126,7 @@ type FeishuAttentionSettings struct {
 }
 
 func (settings FeishuAttentionSettings) TurnCompletionMentionEnabled() bool {
-	return settings.MentionOnTurnCompletion == nil || *settings.MentionOnTurnCompletion
+	return settings.MentionOnTurnCompletion != nil && *settings.MentionOnTurnCompletion
 }
 
 type FeishuAppConfig struct {
@@ -200,7 +200,7 @@ func DefaultAppConfig() AppConfig {
 		},
 		Feishu: FeishuSettings{
 			Attention: FeishuAttentionSettings{
-				MentionOnTurnCompletion: boolPtr(true),
+				MentionOnTurnCompletion: boolPtr(false),
 			},
 		},
 		Storage: StorageSettings{

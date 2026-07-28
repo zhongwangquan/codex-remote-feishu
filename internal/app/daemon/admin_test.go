@@ -84,7 +84,7 @@ func TestSetupTokenExchangeEnablesSetupBootstrapAPI(t *testing.T) {
 
 func TestAdminEndpointsAllowLoopbackAndRedactSecret(t *testing.T) {
 	cfg := config.DefaultAppConfig()
-	mentionOnTurnCompletion := false
+	mentionOnTurnCompletion := true
 	cfg.Feishu.Attention.MentionOnTurnCompletion = &mentionOnTurnCompletion
 	now := time.Now().UTC()
 	currentBinary, realBinary := seedStartupPlanBinaries(t)
@@ -162,8 +162,8 @@ func TestAdminEndpointsAllowLoopbackAndRedactSecret(t *testing.T) {
 	if len(response.Config.Feishu.Apps) != 1 || !response.Config.Feishu.Apps[0].HasSecret {
 		t.Fatalf("unexpected redacted config: %#v", response.Config.Feishu.Apps)
 	}
-	if response.Config.Feishu.Attention.TurnCompletionMentionEnabled() {
-		t.Fatalf("expected redacted config to preserve disabled completion mention, got %#v", response.Config.Feishu.Attention)
+	if !response.Config.Feishu.Attention.TurnCompletionMentionEnabled() {
+		t.Fatalf("expected redacted config to preserve enabled completion mention, got %#v", response.Config.Feishu.Attention)
 	}
 }
 

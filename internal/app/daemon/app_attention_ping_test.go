@@ -162,6 +162,7 @@ func TestHandleUIEventsRetriesRequestAttentionAfterAnchorDeliveryFailure(t *test
 func TestHandleUIEventsMergesFinalAndPlanProposalIntoOneAttentionAnchor(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, serverIdentityForTest())
+	app.SetFeishuAttention(FeishuAttentionRuntimeConfig{MentionOnTurnCompletion: true})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "ou-user-1")
 
 	app.handleUIEvents(context.Background(), []eventcontract.Event{
@@ -216,6 +217,7 @@ func TestHandleUIEventsMergesFinalAndPlanProposalIntoOneAttentionAnchor(t *testi
 func TestHandleUIEventsRecognizesPayloadFirstPlanProposal(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, serverIdentityForTest())
+	app.SetFeishuAttention(FeishuAttentionRuntimeConfig{MentionOnTurnCompletion: true})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "ou-user-1")
 
 	app.handleUIEvents(context.Background(), []eventcontract.Event{
@@ -254,6 +256,7 @@ func TestHandleUIEventsRecognizesPayloadFirstPlanProposal(t *testing.T) {
 func TestHandleUIEventsUsesFailureAttentionWhenTurnFails(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, serverIdentityForTest())
+	app.SetFeishuAttention(FeishuAttentionRuntimeConfig{MentionOnTurnCompletion: true})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "ou-user-1")
 
 	app.handleUIEvents(context.Background(), []eventcontract.Event{
@@ -384,10 +387,9 @@ func TestHandleUIEventsSkipsAttentionWithoutActorIdentity(t *testing.T) {
 	}
 }
 
-func TestHandleUIEventsCanDisableTurnCompletionAttentionOnly(t *testing.T) {
+func TestHandleUIEventsDefaultsTurnCompletionAttentionOffAndPreservesRequestAttention(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, serverIdentityForTest())
-	app.SetFeishuAttention(FeishuAttentionRuntimeConfig{MentionOnTurnCompletion: false})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "ou-user-1")
 
 	app.handleUIEvents(context.Background(), []eventcontract.Event{
