@@ -34,7 +34,6 @@ type workingTaskSummary struct {
 	Origin       workingTaskOrigin
 	Status       state.QueueItemStatus
 	QueueOrder   int
-	Continuable  bool
 }
 
 type workingTaskWorkspaceGroup struct {
@@ -54,18 +53,18 @@ func (s *Service) tasksTerminalPageEvent(surface *state.SurfaceConsoleRecord, ac
 	sections := make([]control.FeishuCardTextSection, 0, len(groups)+2)
 	if len(tasks) == 0 {
 		sections = append(sections, control.FeishuCardTextSection{
-			Lines: []string{"当前没有执行中、排队或可继续的任务。"},
+			Lines: []string{"当前没有正在执行或排队中的任务。"},
 		})
 	} else {
 		sections = append(sections, control.FeishuCardTextSection{
-			Lines: []string{fmt.Sprintf("共 %d 个执行中、排队或可继续的任务。", len(tasks))},
+			Lines: []string{fmt.Sprintf("共 %d 个正在执行或排队中的任务。", len(tasks))},
 		})
 		for _, group := range groups {
 			lines := []string{previewSnippet(workspaceSelectionLabel(group.WorkspaceKey))}
 			for _, task := range group.Tasks {
 				lines = append(lines,
 					"• "+firstNonEmpty(strings.TrimSpace(task.TaskTitle), "未命名任务"),
-					"  来源："+workingTaskOriginLabel(task.Origin)+" · 状态："+workingTaskStatusLabel(task),
+					"  来源："+workingTaskOriginLabel(task.Origin)+" · 状态："+workingTaskStatusLabel(task.Status, task.QueueOrder),
 				)
 			}
 			sections = append(sections, control.FeishuCardTextSection{
@@ -146,15 +145,11 @@ func (s *Service) workingTaskSummaries() []workingTaskSummary {
 			TaskTitle:    threadtitle.DisplayBody(&thread, threadtitle.DefaultDisplayLimit),
 			Origin:       workingTaskPersistedOrigin(persisted.Source),
 			Status:       state.QueueItemRunning,
-			Continuable:  persisted.State == threadcatalogcontract.WorkingTaskStateContinuable,
 		})
 	}
 	sort.SliceStable(tasks, func(i, j int) bool {
 		if tasks[i].WorkspaceKey != tasks[j].WorkspaceKey {
 			return tasks[i].WorkspaceKey < tasks[j].WorkspaceKey
-		}
-		if tasks[i].Continuable != tasks[j].Continuable {
-			return !tasks[i].Continuable
 		}
 		if tasks[i].Status == state.QueueItemQueued && tasks[j].Status != state.QueueItemQueued {
 			return false
@@ -274,14 +269,11 @@ func workingTaskOriginLabel(origin workingTaskOrigin) string {
 	}
 }
 
-func workingTaskStatusLabel(task workingTaskSummary) string {
-	if task.Continuable {
-		return "可继续"
-	}
-	switch task.Status {
+func workingTaskStatusLabel(status state.QueueItemStatus, queueOrder int) string {
+	switch status {
 	case state.QueueItemQueued:
-		if task.QueueOrder > 0 {
-			return fmt.Sprintf("排队中（第 %d 位）", task.QueueOrder)
+		if queueOrder > 0 {
+			return fmt.Sprintf("排队中（第 %d 位）", queueOrder)
 		}
 		return "排队中"
 	case state.QueueItemDispatching:
@@ -293,7 +285,7 @@ func workingTaskStatusLabel(task workingTaskSummary) string {
 	case state.QueueItemSteered:
 		return "已追加指令"
 	default:
-		if value := strings.TrimSpace(string(task.Status)); value != "" {
+		if value := strings.TrimSpace(string(status)); value != "" {
 			return value
 		}
 		return "处理中"

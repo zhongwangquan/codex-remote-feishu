@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-07-28`
-> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；`/tasks` sealed terminal page 现在按 workspace 聚合飞书的执行中/排队任务、本机 Codex CLI/Multica 活跃任务与最近 24 小时可继续的 Codex Desktop 顶层用户任务，并把任务来源、状态等动态值限制在 `plain_text`；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；`/workspace list` 与 alias `/list` 在工作区已确定后也会把 `新建会话` 作为合法 session 选项，并默认选中它；bare `/model` 的下拉候选现在只来自当前 Codex instance 的动态 `model/list` 缓存，无缓存/旧 app-server/刷新失败时只保留手动输入；Codex/VS Code 下 bare `/reasoning` 现在以当前模型的动态 `supportedReasoningEfforts` 投影快捷项，目录不可校验时只保留自动并给出说明，不再展示全局硬编码推理档位；显式表单提交家族仍保持各自既有 submit 语义；`mcpServer/elicitation/request` 承载 MCP tool approval 时会归一成 `mcp_server_elicitation_approval`，飞书卡只开放本次/本会话授权，`persist=always` 仅提示暂不支持跨会话持久允许；`/mcpoauth <server>` 当前只发起 MCP OAuth RPC lifecycle，并用 append-only notice 展示授权链接与完成/失败结果，不进入 request card 或菜单 owner-flow。
+> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；`/tasks` sealed terminal page 现在按 workspace 聚合飞书、Codex Desktop、Codex CLI 与 Multica 中仍有未闭合生命周期和最近活动证据的顶层用户任务，并把任务来源、状态等动态值限制在 `plain_text`；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；`/workspace list` 与 alias `/list` 在工作区已确定后也会把 `新建会话` 作为合法 session 选项，并默认选中它；bare `/model` 的下拉候选现在只来自当前 Codex instance 的动态 `model/list` 缓存，无缓存/旧 app-server/刷新失败时只保留手动输入；Codex/VS Code 下 bare `/reasoning` 现在以当前模型的动态 `supportedReasoningEfforts` 投影快捷项，目录不可校验时只保留自动并给出说明，不再展示全局硬编码推理档位；显式表单提交家族仍保持各自既有 submit 语义；`mcpServer/elicitation/request` 承载 MCP tool approval 时会归一成 `mcp_server_elicitation_approval`，飞书卡只开放本次/本会话授权，`persist=always` 仅提示暂不支持跨会话持久允许；`/mcpoauth <server>` 当前只发起 MCP OAuth RPC lifecycle，并用 append-only notice 展示授权链接与完成/失败结果，不进入 request card 或菜单 owner-flow。
 
 ## 1. 文档定位
 
@@ -120,7 +120,7 @@
 | `/mcpoauth <server>` / `/mcp-oauth <server>` | `daemon-command + append-only notice` | 文本命令解析成 `ActionMCPOAuthCommand`，再通过 `DaemonCommandMCPOAuthLogin` 发起 `mcpServer/oauth/login`。这条链路没有 Feishu card callback payload、没有 current-card replace、没有 request revision，也不占用 `G2 PendingRequest`；daemon 只把 command id 记为 pending OAuth flow，URL-ready 与 completed/error 都向发起 surface append 普通 notice。授权链接一次性展示完整 URL，完成/失败再发一条终态 notice；不会为了打字机效果频繁 patch 卡片 |
 | bare `/compact` | `mixed` | 文本入口当前会先由 orchestrator 建立 compact owner-card flow，并 append 一张 patchable direct-command card；若入口来自 stamped `/menu current_work` 卡，则当前菜单卡会直接被绑定成 compact owner card。dispatching / running / completed / failed 都继续 patch 同一张卡。被动 compact completion 不复用这条前台 owner card；quiet 静默，normal/verbose 则继续并入共享过程卡 |
 | bare `/bendtomywill` / stamped `/menu common_tools -> /bendtomywill` | `mixed` | 文本或菜单入口当前都先走 daemon-side patch flow runtime：打开时会读取当前 attached thread 的 latest completed assistant turn 预览，并命中 refusal / placeholder 候选后生成一张 `request_user_input` 风格的多题 patch 卡。逐题回答时同一张卡会按 `request_revision` inline replace；全部题目完成后当前卡会切到 patchable progress page，随后 success / failure / rollback 结果继续 patch 同一张卡。若首卡还没有 `message_id`，runtime 会先用 `TrackingKey=flow_id` append，再在 gateway 分配 `message_id` 后回写；最近一次回滚按钮则通过 `page_action(ActionTurnPatchRollback, patch_id)` 继续收口到同一张卡。旧卡、他人点击、busy / VS Code / detached 拒绝，以及候选点不存在等路径，若入口来自 stamped 当前卡，会优先走 page-result replacement 收口，否则继续 append-only notice |
-| stamped 菜单入口或工作会话父页 -> `/help` / `/status` / `/tasks` | `launcher/owner -> terminal` | 点击后 daemon 会把 handler 的首个结果卡（帮助目录、snapshot 状态卡或按工作区聚合的任务卡）直接 `ReplaceCurrentCard`，同时结束当前前台 runtime。“工作区与会话”父页新增的 `工作任务` 直接复用这条 `/tasks` 合同，并清掉被替换的 `workspace_page` owner runtime，不建立新的 workspace/picker owner。纯文本 `/help` / `/status` / `/tasks` 仍保持 append-only；`/tasks` 卡只读展示去重后的 Codex thread 标题、来源及 `执行中` / `排队中` / `可继续` 状态，来源当前包括飞书、Codex Desktop、Codex CLI 与 Multica |
+| stamped 菜单入口或工作会话父页 -> `/help` / `/status` / `/tasks` | `launcher/owner -> terminal` | 点击后 daemon 会把 handler 的首个结果卡（帮助目录、snapshot 状态卡或按工作区聚合的任务卡）直接 `ReplaceCurrentCard`，同时结束当前前台 runtime。“工作区与会话”父页新增的 `工作任务` 直接复用这条 `/tasks` 合同，并清掉被替换的 `workspace_page` owner runtime，不建立新的 workspace/picker owner。纯文本 `/help` / `/status` / `/tasks` 仍保持 append-only；`/tasks` 卡只读展示去重后的 Codex thread 标题、来源及 `执行中` / `排队中` 状态，来源当前包括飞书、Codex Desktop、Codex CLI 与 Multica |
 | bare `/admin` / stamped `/menu maintenance -> /admin` | `launcher -> owner` | bare `/admin` 当前会直接打开系统管理根页；若从菜单 handoff 进入，则当前菜单卡会同位替成 `/admin` 根页，并通过 breadcrumb/related button 保留 `返回菜单`。该根页当前显式暴露 `管理页外链`、`本地管理页` 两条入口，并只在 Linux/macOS 暴露 `自动启动`；`/admin web`、`/admin localweb` 与 `/admin autostart...` 的继续执行则分别进入 daemon command 路径。Windows 下 `/admin autostart` 不会在根页显示，但用户手动输入时仍会收到 unsupported/状态反馈，而不是静默吞掉 |
 | stamped `/menu 首页 -> 工作会话` 与后续 `/workspace` / `/workspace new` / `/workspace list` / `/workspace new dir` / `/workspace new git` / `/workspace new worktree` | `launcher -> owner/terminal` | `codex headless` 下从菜单首页点 `工作会话` 会先把原菜单卡替成 bare `/workspace` 父页；该父页当前直接显示 `切换 / 工作任务 / 从目录新建 / 从 GIT URL 新建 / 从 Worktree 新建 / 解除接管`，`/workspace new` 子页也继续保留三条新建入口。`工作任务` 是显式 terminal 例外：直接把 sealed `/tasks` 结果替到当前父页，并同步清掉已不可见的 `workspace_page` runtime；其余业务入口继续进入 owner。workspace page owner runtime 现在会显式记录 handoff 来源卡的 `message_id` 与 `from_menu`，而 target-picker owner runtime 会继续保存一份结构化父页 back payload；因此从这些父页继续进入目录/Git/worktree 业务卡时，子卡 footer 的 `返回上一层` 会稳定回到父页或菜单，不再依赖命令字符串重放或退化到内部 no-op。该路径不再依赖旧 `MenuFlow` 长驻语义。旧 alias `/list` / `/use` / `/useall` 直接输入时也会落到相同业务卡，但不再作为菜单主展示 |
 | stamped `/menu current_work|switch_target -> /stop` / `/new` / `/follow` / `/workspace detach` | `launcher -> terminal` | 点击后 daemon 会把 handler 返回的首个 notice / thread-selection 结果卡直接作为 `ReplaceCurrentCard`，并抑制重复终态 append。菜单 launcher flow 在 handoff 后立即退出，不再保留“半菜单半业务”活跃态 |
@@ -578,11 +578,10 @@ MCP request 卡片当前新增的可视语义：
 `/tasks` 当前复用结构化 `FeishuPageView.BodySections`，但不会建立新的 owner-flow：
 
 - stamped 菜单入口（包括“工作区与会话”父页里的 `工作任务`）沿 `enter_terminal` 把首张任务卡替换到当前卡；从父页进入时会一并结束 `workspace_page` runtime，纯文本 `/tasks` 仍 append 一张 sealed 只读卡且不误伤仍可交互的父页
-- 任务源由两条只读事实合并：relay surface 的 active/queued queue item 代表飞书任务；本机 Codex persisted catalog 只纳入顶层交互线程。最新任务生命周期仍是 `task_started` 且 rollout 文件在最近 10 分钟仍有写入时投影为 `执行中`
-- Codex Desktop 的未归档顶层用户任务即使当前没有未闭合 turn，只要最近 24 小时仍有活动，也会投影为 `可继续`；结构化 `thread_source` 非 `user`、legacy `Automation:`、subagent 与超过 24 小时的历史均排除。Codex CLI / Multica 仍只展示满足 10 分钟活动窗口的真实活跃任务
+- 任务源由两条只读事实合并：relay surface 的 active/queued queue item 代表飞书任务；本机 Codex persisted catalog 只纳入顶层用户线程，并要求最新任务生命周期仍是 `task_started`、rollout 文件在最近 10 分钟仍有写入
+- 结构化 `thread_source` 非 `user`、legacy `Automation:`、subagent、`task_complete` / `turn_aborted` 与活动窗口外的未闭合残影均排除；Desktop、CLI 与 Multica 使用同一条真实活跃判定，不再把最近已完成任务投影成 `可继续`
 - persisted catalog 按 rollout `session_meta.originator` 区分 Codex Desktop、Codex CLI 与 Multica；`Codex Remote Headless` 由 relay surface 主链拥有，persisted 路径显式排除，避免离线残影和当前飞书任务重复
-- 卡片先按 workspace 分组，再在每个 workspace 下展示多个 Codex thread 标题、来源与 `执行中` / `排队中` / `可继续` 状态；同一 `workspace + thread` 只展示一次，飞书 runtime 事实优先于同 thread 的 persisted 记录
-- `可继续` 只是 sealed terminal page 的只读显示状态，不建立 owner-flow，也不进入 remote route / queue / dispatch 状态机；当前卡不提供继续、打断或审批 Desktop turn 的动作
+- 卡片先按 workspace 分组，再在每个 workspace 下展示多个 Codex thread 标题、来源与 `执行中` / `排队中` 状态；同一 `workspace + thread` 只展示一次，飞书 runtime 事实优先于同 thread 的 persisted 记录
 - `Label` 只使用 `工作区` / `更多任务` 这类固定系统文案；动态 workspace、thread title、来源与状态内容全部位于 `Lines`，最终由 adapter 投影为 `plain_text`
 - 单卡最多展开 50 个任务，workspace 与任务标题各限制为 40 rune；任务超出时使用固定 overflow section 展示剩余数量。最坏 50 个不同 workspace 约产生 100 个任务正文元素，回归测试同时验证 200 element 与 30 KB message transport hard limits
 
@@ -955,9 +954,9 @@ pending input 不是卡片 owner-flow，但它会直接改变用户消息上的 
 - [internal/adapter/feishu/projector_command_catalog_test.go](../../internal/adapter/feishu/projector_command_catalog_test.go)
   - 锁定 `/menu` 首页投影结果只显示根 breadcrumb `菜单首页`，并把每个分组渲染成同名按钮
 - [internal/core/orchestrator/service_tasks_test.go](../../internal/core/orchestrator/service_tasks_test.go)
-  - 锁定 `/tasks` 合并飞书、Codex Desktop 与 Codex CLI 任务，区分 `执行中` / `排队中` / `可继续`，使用 Codex thread title、按 workspace 聚合多个任务、同 thread 优先保留飞书 runtime 事实，以及 50 个任务后的 overflow 降级
+  - 锁定 `/tasks` 合并飞书、Codex Desktop 与 Codex CLI 的活跃任务，区分 `执行中` / `排队中`，使用 Codex thread title、按 workspace 聚合多个任务、同 thread 优先保留飞书 runtime 事实，以及 50 个任务后的 overflow 降级
 - [internal/codexstate/working_tasks_test.go](../../internal/codexstate/working_tasks_test.go)
-  - 锁定 Desktop/CLI 来源识别、Desktop 24 小时 `可继续` 窗口、CLI/Multica 10 分钟活跃窗口、结构化与 legacy automation 排除、Remote Headless 与 subagent 排除，以及大 rollout 的末尾生命周期扫描
+  - 锁定 Desktop/CLI 来源识别、共同的 10 分钟活跃窗口、completed/aborted 排除、结构化与 legacy automation 排除、Remote Headless 与 subagent 排除，以及大 rollout 的末尾生命周期扫描
 - [internal/adapter/feishu/projector_tasks_plaintext_test.go](../../internal/adapter/feishu/projector_tasks_plaintext_test.go)
   - 锁定 `/tasks` 的动态 workspace、thread title、来源与状态只进入 `plain_text`，不会泄漏到 raw markdown；50 任务最坏投影仍满足 Feishu 元素数与 message transport 预算
 - [internal/core/orchestrator/service_command_card_test.go](../../internal/core/orchestrator/service_command_card_test.go)
@@ -1021,7 +1020,7 @@ pending input 不是卡片 owner-flow，但它会直接改变用户消息上的 
 10. route / attach 上下文变化后，workspace page / target picker / path picker / history / review picker 这类旧卡是否仍会留下“看似可点、第一次点才报过期”的假活状态
 11. 普通输入立即派发时是否错误地重新投影 `QueueOn` 造成 `OneSecond -> THINKING` 闪动；真正等待队列的输入是否仍保留 `QueueOn`
 12. `feishu.attention.mentionOnTurnCompletion` 默认关闭时是否只影响 final / failure / plan proposal；显式开启时是否只恢复这三类 turn terminal mention，而没有改变 request prompt 或 targeted global runtime notice
-13. `/tasks` 是否仍把 workspace/thread/source/status 动态值限制在 `plain_text`；CLI/Multica 是否只纳入未闭合且最近 10 分钟仍活跃的顶层任务；Desktop 是否只在 24 小时内把未归档顶层用户任务投影为 `可继续`，并排除 automation/subagent/Remote Headless；是否仍在 50 任务上限后使用 overflow section；“工作区与会话”父页入口是否仍走 `enter_terminal + ReplaceCurrentCard`，而不是 append 第二张卡或建立新的 owner
+13. `/tasks` 是否仍把 workspace/thread/source/status 动态值限制在 `plain_text`；Desktop/CLI/Multica 是否都只纳入未闭合且最近 10 分钟仍活跃的顶层用户任务，并排除 completed/aborted、automation/subagent/Remote Headless；是否仍在 50 任务上限后使用 overflow section；“工作区与会话”父页入口是否仍走 `enter_terminal + ReplaceCurrentCard`，而不是 append 第二张卡或建立新的 owner
 
 ## 待讨论取舍
 

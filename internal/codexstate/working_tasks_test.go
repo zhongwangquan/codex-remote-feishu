@@ -11,17 +11,16 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
 )
 
-func TestSQLiteThreadCatalogWorkingTasksReturnsActiveAndContinuableDesktopTasks(t *testing.T) {
-	now := time.Unix(1775710600, 0)
+func TestSQLiteThreadCatalogWorkingTasksReturnsOnlyActiveTopLevelUserTasks(t *testing.T) {
 	dbPath := createThreadCatalogTestDB(t)
 	rolloutDir := t.TempDir()
 	activeCLI := writeWorkingTaskRollout(t, rolloutDir, "thread-1", []string{
 		rolloutSessionMetaJSON("codex-tui"),
 		rolloutLifecycleJSON("task_started"),
 	})
-	continuableDesktop := writeWorkingTaskRollout(t, rolloutDir, "thread-3", []string{
+	activeDesktop := writeWorkingTaskRollout(t, rolloutDir, "thread-3", []string{
 		rolloutSessionMetaJSON("Codex Desktop"),
-		rolloutLifecycleJSON("task_complete"),
+		rolloutLifecycleJSON("task_started"),
 	})
 	remoteHeadless := writeWorkingTaskRollout(t, rolloutDir, "thread-2", []string{
 		rolloutSessionMetaJSON("Codex Remote Headless"),
@@ -43,7 +42,7 @@ func TestSQLiteThreadCatalogWorkingTasksReturnsActiveAndContinuableDesktopTasks(
 		archive int
 	}{
 		{id: "thread-1", path: activeCLI},
-		{id: "thread-3", path: continuableDesktop},
+		{id: "thread-3", path: activeDesktop},
 		{id: "thread-2", path: remoteHeadless, archive: 0},
 		{id: "thread-subagent", path: filteredSubagent},
 	}
@@ -53,32 +52,23 @@ func TestSQLiteThreadCatalogWorkingTasksReturnsActiveAndContinuableDesktopTasks(
 		}
 	}
 
-	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{
-		Logf: func(string, ...any) {},
-		Now:  func() time.Time { return now },
-	})
+	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})
 	tasks, err := catalog.WorkingTasks(10)
 	if err != nil {
 		t.Fatalf("working tasks: %v", err)
 	}
 	if len(tasks) != 2 {
-		t.Fatalf("working tasks = %#v, want one continuable Desktop task and one active CLI task", tasks)
+		t.Fatalf("working tasks = %#v, want one active Desktop task and one active CLI task", tasks)
 	}
 	if tasks[0].Thread.ThreadID != "thread-3" || tasks[0].Source != threadcatalogcontract.WorkingTaskSourceCodexDesktop {
 		t.Fatalf("first working task = %#v, want desktop thread-3", tasks[0])
 	}
-	if tasks[0].State != threadcatalogcontract.WorkingTaskStateContinuable {
-		t.Fatalf("desktop task state = %q, want continuable", tasks[0].State)
-	}
 	if tasks[1].Thread.ThreadID != "thread-1" || tasks[1].Source != threadcatalogcontract.WorkingTaskSourceCodexCLI {
 		t.Fatalf("second working task = %#v, want CLI thread-1", tasks[1])
 	}
-	if tasks[1].State != threadcatalogcontract.WorkingTaskStateActive {
-		t.Fatalf("CLI task state = %q, want active", tasks[1].State)
-	}
 }
 
-func TestSQLiteThreadCatalogWorkingTasksTreatsStaleDesktopRolloutAsContinuable(t *testing.T) {
+func TestSQLiteThreadCatalogWorkingTasksExcludesStaleUnclosedDesktopRollout(t *testing.T) {
 	now := time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC)
 	dbPath := createThreadCatalogTestDB(t)
 	path := writeWorkingTaskRollout(t, t.TempDir(), "thread-1", []string{
@@ -97,10 +87,6 @@ func TestSQLiteThreadCatalogWorkingTasksTreatsStaleDesktopRolloutAsContinuable(t
 	if _, err := db.Exec(`UPDATE threads SET rollout_path = ? WHERE id = 'thread-1'`, path); err != nil {
 		t.Fatalf("update rollout path: %v", err)
 	}
-	if _, err := db.Exec(`UPDATE threads SET updated_at = ? WHERE id = 'thread-1'`, now.Unix()); err != nil {
-		t.Fatalf("update thread recency: %v", err)
-	}
-
 	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{
 		Logf: func(string, ...any) {},
 		Now:  func() time.Time { return now },
@@ -109,11 +95,8 @@ func TestSQLiteThreadCatalogWorkingTasksTreatsStaleDesktopRolloutAsContinuable(t
 	if err != nil {
 		t.Fatalf("working tasks: %v", err)
 	}
-	if len(tasks) != 1 {
-		t.Fatalf("stale unclosed Desktop rollout should remain continuable: %#v", tasks)
-	}
-	if tasks[0].State != threadcatalogcontract.WorkingTaskStateContinuable {
-		t.Fatalf("stale Desktop task state = %q, want continuable", tasks[0].State)
+	if len(tasks) != 0 {
+		t.Fatalf("stale unclosed Desktop rollout should not stay active: %#v", tasks)
 	}
 }
 
@@ -198,8 +181,7 @@ func TestSQLiteTableHasColumnSupportsLegacyAndCurrentSchemas(t *testing.T) {
 	}
 }
 
-func TestSQLiteThreadCatalogWorkingTasksExcludesStaleContinuableDesktopTask(t *testing.T) {
-	now := time.Unix(1775710600, 0)
+func TestSQLiteThreadCatalogWorkingTasksExcludesCompletedDesktopTask(t *testing.T) {
 	dbPath := createThreadCatalogTestDB(t)
 	path := writeWorkingTaskRollout(t, t.TempDir(), "thread-3", []string{
 		rolloutSessionMetaJSON("Codex Desktop"),
@@ -210,21 +192,17 @@ func TestSQLiteThreadCatalogWorkingTasksExcludesStaleContinuableDesktopTask(t *t
 		t.Fatalf("open test sqlite: %v", err)
 	}
 	defer db.Close()
-	staleAt := now.Add(-workingTaskContinuableWindow - time.Second)
-	if _, err := db.Exec(`UPDATE threads SET rollout_path = ?, updated_at = ? WHERE id = 'thread-3'`, path, staleAt.Unix()); err != nil {
-		t.Fatalf("update stale Desktop task: %v", err)
+	if _, err := db.Exec(`UPDATE threads SET rollout_path = ? WHERE id = 'thread-3'`, path); err != nil {
+		t.Fatalf("update completed Desktop task: %v", err)
 	}
 
-	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{
-		Logf: func(string, ...any) {},
-		Now:  func() time.Time { return now },
-	})
+	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})
 	tasks, err := catalog.WorkingTasks(10)
 	if err != nil {
 		t.Fatalf("working tasks: %v", err)
 	}
 	if len(tasks) != 0 {
-		t.Fatalf("stale continuable Desktop task should be excluded: %#v", tasks)
+		t.Fatalf("completed Desktop task should be excluded: %#v", tasks)
 	}
 }
 

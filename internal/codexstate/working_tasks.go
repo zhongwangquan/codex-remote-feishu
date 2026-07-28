@@ -21,7 +21,6 @@ const (
 	workingTaskMaxCandidateLimit  = 1000
 	rolloutLifecycleReadChunkSize = 64 * 1024
 	workingTaskActivityWindow     = 10 * time.Minute
-	workingTaskContinuableWindow  = 24 * time.Hour
 )
 
 type workingTaskCandidate struct {
@@ -64,23 +63,12 @@ func (c *SQLiteThreadCatalog) WorkingTasks(limit int) ([]threadcatalogcontract.W
 		if !include {
 			continue
 		}
-		active := c.workingTaskCandidateActive(candidate)
-		if source != threadcatalogcontract.WorkingTaskSourceCodexDesktop && !active {
+		if !c.workingTaskCandidateActive(candidate) {
 			continue
-		}
-		if source == threadcatalogcontract.WorkingTaskSourceCodexDesktop &&
-			!active &&
-			c.now().Sub(candidate.thread.LastUsedAt) > workingTaskContinuableWindow {
-			continue
-		}
-		taskState := threadcatalogcontract.WorkingTaskStateContinuable
-		if active {
-			taskState = threadcatalogcontract.WorkingTaskStateActive
 		}
 		tasks = append(tasks, threadcatalogcontract.WorkingTaskRecord{
 			Thread: candidate.thread,
 			Source: source,
-			State:  taskState,
 		})
 		if len(tasks) >= limit {
 			break

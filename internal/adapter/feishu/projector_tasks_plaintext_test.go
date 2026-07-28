@@ -19,7 +19,7 @@ func TestProjectTasksPageKeepsWorkspaceAndThreadTitlesOutOfMarkdown(t *testing.T
 		CommandID: control.FeishuCommandTasks,
 		Title:     "工作任务",
 		BodySections: []control.FeishuCardTextSection{
-			{Lines: []string{"共 1 个执行中、排队或可继续的任务。"}},
+			{Lines: []string{"共 1 个正在执行或排队中的任务。"}},
 			{
 				Label: "工作区",
 				Lines: []string{
@@ -57,7 +57,7 @@ func TestProjectTasksPageKeepsWorkspaceAndThreadTitlesOutOfMarkdown(t *testing.T
 
 func TestProjectTasksPageMaximumCatalogFitsFeishuCardBudget(t *testing.T) {
 	sections := []control.FeishuCardTextSection{{
-		Lines: []string{"共 50 个执行中、排队或可继续的任务。"},
+		Lines: []string{"共 50 个正在执行或排队中的任务。"},
 	}}
 	for i := 0; i < 50; i++ {
 		sections = append(sections, control.FeishuCardTextSection{
