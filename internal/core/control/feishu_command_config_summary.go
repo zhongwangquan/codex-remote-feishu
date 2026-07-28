@@ -108,10 +108,20 @@ func promptValueCardSections(view FeishuCatalogConfigView) []FeishuCardTextSecti
 	}
 	return dualValueCardSections(
 		currentLabel,
-		commandDisplayValue(view.EffectiveValue, "未设置"),
+		promptEffectiveDisplayValue(view),
 		"飞书覆盖",
 		promptOverrideDisplayValue(view),
 	)
+}
+
+func promptEffectiveDisplayValue(view FeishuCatalogConfigView) string {
+	if value := strings.TrimSpace(view.EffectiveValue); value != "" {
+		return value
+	}
+	if !view.UsesLocalRequestedOverrides && strings.TrimSpace(view.EffectiveValueSource) == "codex_config" {
+		return "跟随 Codex 配置"
+	}
+	return "未设置"
 }
 
 func sharedAuthorityCurrentValueLabel(source string) string {
@@ -129,6 +139,9 @@ func promptOverrideDisplayValue(view FeishuCatalogConfigView) string {
 	}
 	if view.UsesLocalRequestedOverrides {
 		return "无（跟随 VS Code 当前状态）"
+	}
+	if strings.TrimSpace(view.EffectiveValueSource) == "codex_config" {
+		return "无（跟随 Codex 配置）"
 	}
 	return "无"
 }

@@ -101,7 +101,7 @@ func TestSurfaceSnapshotExposesAttachmentObjectTypeByMode(t *testing.T) {
 	}
 }
 
-func TestStatusUsesSurfaceDefaultsWhenObservedConfigUnknown(t *testing.T) {
+func TestStatusShowsCodexOwnedConfigWhenObservedConfigUnknown(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -122,11 +122,11 @@ func TestStatusUsesSurfaceDefaultsWhenObservedConfigUnknown(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("expected surface snapshot")
 	}
-	if snapshot.NextPrompt.EffectiveModel != "gpt-5.4" || snapshot.NextPrompt.EffectiveModelSource != "surface_default" {
-		t.Fatalf("expected default model fallback, got %#v", snapshot.NextPrompt)
+	if snapshot.NextPrompt.EffectiveModel != "" || snapshot.NextPrompt.EffectiveModelSource != "codex_config" {
+		t.Fatalf("expected model to follow codex config, got %#v", snapshot.NextPrompt)
 	}
-	if snapshot.NextPrompt.EffectiveReasoningEffort != "xhigh" || snapshot.NextPrompt.EffectiveReasoningEffortSource != "surface_default" {
-		t.Fatalf("expected xhigh reasoning fallback, got %#v", snapshot.NextPrompt)
+	if snapshot.NextPrompt.EffectiveReasoningEffort != "" || snapshot.NextPrompt.EffectiveReasoningEffortSource != "codex_config" {
+		t.Fatalf("expected reasoning to follow codex config, got %#v", snapshot.NextPrompt)
 	}
 	if snapshot.NextPrompt.EffectiveAccessMode != agentproto.AccessModeFullAccess || snapshot.NextPrompt.EffectiveAccessModeSource != "surface_default" {
 		t.Fatalf("expected default full access, got %#v", snapshot.NextPrompt)
@@ -168,8 +168,8 @@ func TestHeadlessTextMessageIgnoresLegacyCWDDefaultsWhenNoSurfaceOverride(t *tes
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.4" || item.FrozenOverride.ReasoningEffort != "" {
-		t.Fatalf("expected queued item to ignore legacy cwd defaults and freeze surface defaults, got %#v", item.FrozenOverride)
+	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" {
+		t.Fatalf("expected queued item to ignore legacy cwd defaults and follow codex config, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
 		t.Fatalf("expected queued item to freeze full access, got %#v", item.FrozenOverride)
@@ -227,7 +227,7 @@ func TestResolveWorkspaceDefaultsPartitionsByBackend(t *testing.T) {
 	}
 }
 
-func TestTextMessageFreezesFallbackReasoningWhenConfigUnknown(t *testing.T) {
+func TestTextMessageLeavesModelReasoningToCodexWhenConfigUnknown(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -259,11 +259,8 @@ func TestTextMessageFreezesFallbackReasoningWhenConfigUnknown(t *testing.T) {
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.4" {
-		t.Fatalf("expected queued item to freeze default model, got %#v", item.FrozenOverride)
-	}
-	if item.FrozenOverride.ReasoningEffort != "" || item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
-		t.Fatalf("expected queued item to freeze fallback config without implicit reasoning, got %#v", item.FrozenOverride)
+	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" || item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
+		t.Fatalf("expected queued item to leave model/reasoning to codex while freezing access, got %#v", item.FrozenOverride)
 	}
 }
 

@@ -134,7 +134,7 @@ func (s *Service) resolveFrozenPromptOverride(inst *state.InstanceRecord, surfac
 	}
 	resolution := s.resolvePromptConfig(inst, surface, threadID, cwd, override)
 	return state.ModelConfigRecord{
-		Model:           resolution.EffectiveModel.Value,
+		Model:           requestedOverride.Model,
 		ReasoningEffort: requestedOverride.ReasoningEffort,
 		AccessMode:      resolution.EffectiveAccessMode,
 	}
@@ -172,18 +172,18 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 	effectiveModel := baseModel
 	if override.Model != "" {
 		effectiveModel = configValue{Value: override.Model, Source: "surface_override"}
-	} else if effectiveModel.Value == "" {
-		if defaultValue := defaultPromptModelForBackend(backend); defaultValue != "" {
-			effectiveModel = configValue{Value: defaultValue, Source: "surface_default"}
-		}
+	} else if effectiveModel.Value == "" &&
+		agentproto.NormalizeBackend(backend) == agentproto.BackendCodex &&
+		!s.surfaceUsesLocalRequestedPromptOverrides(surface) {
+		effectiveModel = configValue{Source: "codex_config"}
 	}
 	effectiveEffort := baseEffort
 	if override.ReasoningEffort != "" {
 		effectiveEffort = configValue{Value: override.ReasoningEffort, Source: "surface_override"}
-	} else if effectiveEffort.Value == "" {
-		if defaultValue := defaultPromptReasoningEffortForBackend(backend); defaultValue != "" {
-			effectiveEffort = configValue{Value: defaultValue, Source: "surface_default"}
-		}
+	} else if effectiveEffort.Value == "" &&
+		agentproto.NormalizeBackend(backend) == agentproto.BackendCodex &&
+		!s.surfaceUsesLocalRequestedPromptOverrides(surface) {
+		effectiveEffort = configValue{Source: "codex_config"}
 	}
 	effectiveAccessModeSource := "surface_default"
 	effectiveAccessMode := agentproto.AccessModeFullAccess
@@ -223,20 +223,6 @@ func (s *Service) promptConfigClaudeProfileID(inst *state.InstanceRecord, surfac
 		return inst.ClaudeProfileID
 	}
 	return state.DefaultClaudeProfileID
-}
-
-func defaultPromptModelForBackend(backend agentproto.Backend) string {
-	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
-		return ""
-	}
-	return defaultModel
-}
-
-func defaultPromptReasoningEffortForBackend(backend agentproto.Backend) string {
-	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
-		return ""
-	}
-	return defaultReasoningEffort
 }
 
 func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string) (configValue, configValue, configValue) {

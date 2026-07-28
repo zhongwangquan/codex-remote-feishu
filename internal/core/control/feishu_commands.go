@@ -279,7 +279,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			ArgumentFormHint: "gpt-5.4 high",
 			ArgumentFormNote: "输入模型名，或输入“模型名 推理强度”。",
 			ArgumentSubmit:   "应用",
-			Description:      "查看当前模型配置；bare `/model` 会给出当前实例可用模型与手动输入入口。",
+			Description:      "查看当前模型配置；默认跟随 Codex，bare `/model` 会给出当前实例可用模型与手动输入入口。",
 			Examples:         []string{"/model gpt-5.4", "/model gpt-5.4 high", "/model clear"},
 			ShowInHelp:       true,
 			ShowInMenu:       true,

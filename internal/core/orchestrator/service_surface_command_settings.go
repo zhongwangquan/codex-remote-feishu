@@ -598,8 +598,8 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 		}, func(control.PromptRouteSummary) surfaceSettingFeedback {
 			return surfaceSettingFeedback{
 				NoticeCode:     "surface_override_cleared",
-				NoticeText:     "已清除飞书临时模型覆盖。之后从飞书发送的消息将恢复使用底层真实配置。",
-				CardStatusText: "已清除飞书临时模型覆盖。之后从飞书发送的消息将恢复使用底层真实配置。",
+				NoticeText:     "已清除飞书临时模型覆盖。之后从飞书发送的消息将跟随 Codex 当前配置。",
+				CardStatusText: "已清除飞书临时模型覆盖。之后从飞书发送的消息将跟随 Codex 当前配置。",
 			}
 		})
 	}

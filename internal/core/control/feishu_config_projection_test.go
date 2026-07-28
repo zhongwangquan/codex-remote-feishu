@@ -69,6 +69,21 @@ func TestAccessConfigPageShowsUnmappedObservedThreadAccess(t *testing.T) {
 	}
 }
 
+func TestModelConfigPageShowsCodexFollowState(t *testing.T) {
+	page := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
+		CommandID:            FeishuCommandModel,
+		CatalogBackend:       agentproto.BackendCodex,
+		EffectiveValueSource: "codex_config",
+	})
+	text := configPageSummaryText(page)
+	if !strings.Contains(text, "下条消息\n跟随 Codex 配置") {
+		t.Fatalf("expected model page to show codex-owned effective config, got %q", text)
+	}
+	if !strings.Contains(text, "飞书覆盖\n无（跟随 Codex 配置）") {
+		t.Fatalf("expected model page to show no remote override, got %q", text)
+	}
+}
+
 func configPageSummaryText(page FeishuPageView) string {
 	var parts []string
 	for _, section := range page.SummarySections {

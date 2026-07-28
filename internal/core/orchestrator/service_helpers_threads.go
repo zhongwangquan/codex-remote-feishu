@@ -508,6 +508,9 @@ func formatOverrideNotice(summary control.PromptRouteSummary, prefix string) str
 
 func displayConfigValue(value, source string) string {
 	if strings.TrimSpace(value) == "" {
+		if strings.TrimSpace(source) == "codex_config" {
+			return "跟随 Codex 配置"
+		}
 		return "未知"
 	}
 	return value
@@ -525,6 +528,8 @@ func configSourceLabel(value string) string {
 		return "飞书临时覆盖"
 	case "surface_default":
 		return "飞书默认"
+	case "codex_config":
+		return "Codex 配置"
 	default:
 		return "未知"
 	}
