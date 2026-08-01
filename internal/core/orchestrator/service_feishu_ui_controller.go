@@ -50,6 +50,8 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		return []eventcontract.Event{s.menuPageEvent(surface, intent.RawText, intent.SourceMessageID)}
 	case control.FeishuUIIntentShowHistory:
 		return s.openThreadHistory(surface, intent.SourceMessageID, intent.Inline)
+	case control.FeishuUIIntentShowTasks:
+		return []eventcontract.Event{s.openTaskBrowser(surface, intent.SourceMessageID, intent.Inline, false)}
 	case control.FeishuUIIntentShowReviewRoot:
 		return []eventcontract.Event{s.reviewRootPageEvent(surface, s.reviewRootPageTriggeredFromMenu(surface, intent.SourceMessageID))}
 	case control.FeishuUIIntentShowList:
@@ -125,6 +127,18 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		return s.handleThreadHistoryPage(surface, intent.PickerID, intent.Page, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
 	case control.FeishuUIIntentHistoryDetail:
 		return s.handleThreadHistoryDetail(surface, intent.PickerID, intent.TurnID, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
+	case control.FeishuUIIntentTaskOpen:
+		return s.handleTaskOpen(surface, intent.PickerID, intent.ThreadID, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
+	case control.FeishuUIIntentTaskList:
+		return s.handleTaskList(surface, intent.PickerID, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
+	case control.FeishuUIIntentTaskRefresh:
+		return s.handleTaskRefresh(surface, intent.PickerID, intent.ThreadID, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
+	case control.FeishuUIIntentTaskPage:
+		return s.handleTaskPage(surface, intent.PickerID, intent.ThreadID, intent.Page, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
+	case control.FeishuUIIntentTaskHome:
+		return s.handleTaskHome(surface, intent.PickerID, intent.ActorUserID, intent.SourceMessageID)
+	case control.FeishuUIIntentTaskReply:
+		return s.handleTaskReply(surface, intent.PickerID, intent.ThreadID, intent.Text, intent.ActorUserID, intent.SourceMessageID, intent.Inline)
 	default:
 		return nil
 	}

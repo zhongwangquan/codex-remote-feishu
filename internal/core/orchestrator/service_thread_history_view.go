@@ -178,6 +178,21 @@ func (s *Service) HandleSurfaceThreadHistoryLoaded(surfaceID string) []eventcont
 	if surface == nil || flow == nil || flow.Kind != ownerCardFlowKindThreadHistory || record == nil {
 		return nil
 	}
+	if record.TaskBrowser {
+		history := s.SurfaceThreadHistory(surface.SurfaceSessionID)
+		if history == nil {
+			return []eventcontract.Event{s.threadHistoryViewEvent(surface, s.buildTaskConversationErrorView(surface, flow, record, "还没有拿到可展示的会话内容，请稍后重试。"), false, "")}
+		}
+		s.cacheTaskHistory(surface, *history)
+		if strings.TrimSpace(history.Thread.ThreadID) != strings.TrimSpace(record.ThreadID) {
+			return nil
+		}
+		record.PendingReply = ""
+		record.PendingQueueItem = ""
+		flow.Phase = ownerCardFlowPhaseResolved
+		bumpOwnerCardFlowRevision(flow)
+		return []eventcontract.Event{s.threadHistoryViewEvent(surface, s.buildTaskConversationView(surface, flow, record), false, "")}
+	}
 	inst, threadID, noticeCode, noticeText := s.currentThreadHistoryTarget(surface)
 	if inst == nil || threadID == "" || threadID != record.ThreadID {
 		view := s.buildThreadHistoryErrorView(surface, nil, flow, record, firstNonEmpty(noticeCode, "history_expired"), firstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
@@ -206,6 +221,11 @@ func (s *Service) HandleSurfaceThreadHistoryFailure(surfaceID, code, text string
 	record := s.activeThreadHistory(surface)
 	if flow == nil || flow.Kind != ownerCardFlowKindThreadHistory || record == nil {
 		return notice(surface, code, text)
+	}
+	if record.TaskBrowser {
+		flow.Phase = ownerCardFlowPhaseError
+		bumpOwnerCardFlowRevision(flow)
+		return []eventcontract.Event{s.threadHistoryViewEvent(surface, s.buildTaskConversationErrorView(surface, flow, record, text), false, "")}
 	}
 	flow.Phase = ownerCardFlowPhaseError
 	bumpOwnerCardFlowRevision(flow)

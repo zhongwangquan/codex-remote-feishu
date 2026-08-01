@@ -22,6 +22,7 @@ const (
 
 type surfaceOverlayRouteCleanupOptions struct {
 	PreserveTargetPicker  bool
+	PreserveThreadHistory bool
 	ForceClearReviewState bool
 }
 
@@ -91,7 +92,9 @@ func (s *Service) cleanupContextBoundSurfaceOverlays(surface *state.SurfaceConso
 			events = append(events, s.sealTargetPickerForContextChange(surface, cause)...)
 		}
 	}
-	events = append(events, s.sealThreadHistoryForContextChange(surface, cause)...)
+	if !options.PreserveThreadHistory {
+		events = append(events, s.sealThreadHistoryForContextChange(surface, cause)...)
+	}
 	events = append(events, s.sealReviewCommitPickerForContextChange(surface, cause)...)
 	events = append(events, s.sealWorkspacePageForContextChange(surface, cause)...)
 	if options.ForceClearReviewState {

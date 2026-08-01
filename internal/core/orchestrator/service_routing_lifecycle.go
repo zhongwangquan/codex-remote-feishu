@@ -24,6 +24,7 @@ func (s *Service) finalizeDetachedSurfaceWithOverlayCleanup(surface *state.Surfa
 	s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{})
 	events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已断开", surfaceOverlayRouteCleanupOptions{
 		PreserveTargetPicker:  cleanup.PreserveTargetPicker,
+		PreserveThreadHistory: cleanup.PreserveThreadHistory,
 		ForceClearReviewState: true,
 	})...)
 	s.resetSurfaceExecutionGates(surface)

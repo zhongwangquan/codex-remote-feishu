@@ -1,8 +1,8 @@
 # Feishu Card API Constraints
 
 > Type: `general`
-> Updated: `2026-05-04`
-> Summary: 固化当前仓库进行飞书卡片、消息卡片 patch、CardKit 流式更新设计时必须先考虑的平台硬约束、频控和降级基线。
+> Updated: `2026-08-01`
+> Summary: 固化当前仓库进行飞书卡片、消息卡片 patch、CardKit 流式更新设计时必须先考虑的平台硬约束、频控和降级基线；2026-08-01 已重新核对官方文档，30 KB、200 elements、3 秒 callback 与单卡 10 次/秒基线保持不变。
 
 ## 1. 文档定位
 
@@ -114,6 +114,7 @@
 
 来源：
 
+- `https://open.feishu.cn/document/server-docs/im-v1/message/create`
 - `https://open.feishu.cn/document/feishu-cards/card-json-v2-structure`
 - `https://open.feishu.cn/document/feishu-cards/card-json-v2-components/containers/form-container`
 - `https://open.feishu.cn/document/feishu-cards/card-json-v2-components/containers/column-set`
@@ -184,6 +185,7 @@ CardKit 卡片实体本身也有生命周期限制：
 来源：
 
 - `https://open.feishu.cn/document/uAjLw4CM/ukzMukzMukzM/feishu-cards/handle-card-callbacks`
+- `https://open.feishu.cn/document/ukTMukTMukTM/uMDO1YjLzgTN24yM4UjN`
 
 ### 3.9 流式更新与交互之间的时序限制
 
@@ -283,6 +285,15 @@ CardKit 卡片实体本身也有生命周期限制：
 4. 交互完成后是否恢复流式，还是进入普通 patch 模式
 
 当前仓库不应再默认假设“流式卡片和交互卡片可以天然混在同一状态里”。
+
+### 5.5 任务浏览器的当前预算与降级
+
+`/tasks` 当前不是无限 transcript 卡，必须维持以下显式预算：
+
+1. 列表最多 30 个任务、每个 workspace 最多 8 个；超出项不进入当前卡，用户通过显式刷新查看新的最近窗口。
+2. 详情每页 2 个 turn、每 turn 最多 4 条 user/assistant message、每条最多 800 rune；更早内容用 `task_page` 分页，不把 tool/reasoning/diff/plan 塞入详情。
+3. 列表和详情的最坏投影都必须在测试中按真实 message/callback envelope 验证 `< 30 KB` 且 `< 200 elements`。
+4. 返回列表使用 cache，不产生新卡和重复 history read；刷新才触发新的读取。任务卡不采用 streaming mode，避免 Follow up 表单与流式更新争用同一交互状态。
 
 ## 6. 当前仓库的默认设计检查清单
 

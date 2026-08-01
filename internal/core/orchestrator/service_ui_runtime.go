@@ -110,10 +110,21 @@ type activeTargetPickerRecord struct {
 }
 
 type activeThreadHistoryRecord struct {
-	ThreadID string
-	ViewMode control.FeishuThreadHistoryViewMode
-	Page     int
-	TurnID   string
+	ThreadID         string
+	ViewMode         control.FeishuThreadHistoryViewMode
+	Page             int
+	TurnID           string
+	TaskBrowser      bool
+	PendingThreadID  string
+	PendingReply     string
+	PendingQueueItem string
+}
+
+type taskBrowserCacheRecord struct {
+	Tasks     []workingTaskSummary
+	Histories map[string]agentproto.ThreadHistoryRecord
+	LoadedAt  time.Time
+	ExpiresAt time.Time
 }
 
 type activeReviewPickerRecord struct {
@@ -184,6 +195,7 @@ type surfaceUIRuntimeRecord struct {
 	ActivePathPicker    *activePathPickerRecord
 	ActivePlanProposal  *activePlanProposalRecord
 	ActiveWorkspacePage *activeWorkspacePageRecord
+	TaskBrowserCache    *taskBrowserCacheRecord
 }
 
 type SurfaceUIRuntimeSummary struct {
@@ -198,6 +210,7 @@ type SurfaceUIRuntimeSummary struct {
 	ActivePathPickerID       string
 	ActivePlanProposalID     string
 	ActiveWorkspacePageID    string
+	TaskBrowserCacheLoaded   bool
 }
 
 func (s *Service) surfaceUIRuntimeState(surface *state.SurfaceConsoleRecord) *surfaceUIRuntimeRecord {
@@ -301,6 +314,22 @@ func (s *Service) clearSurfaceThreadHistory(surface *state.SurfaceConsoleRecord)
 		return
 	}
 	runtime.ActiveThreadHistory = nil
+}
+
+func (s *Service) taskBrowserCache(surface *state.SurfaceConsoleRecord) *taskBrowserCacheRecord {
+	runtime := s.surfaceUIRuntimeState(surface)
+	if runtime == nil {
+		return nil
+	}
+	return runtime.TaskBrowserCache
+}
+
+func (s *Service) setTaskBrowserCache(surface *state.SurfaceConsoleRecord, cache *taskBrowserCacheRecord) {
+	runtime := s.ensureSurfaceUIRuntime(surface)
+	if runtime == nil {
+		return
+	}
+	runtime.TaskBrowserCache = cache
 }
 
 func (s *Service) activeReviewPicker(surface *state.SurfaceConsoleRecord) *activeReviewPickerRecord {
@@ -436,6 +465,7 @@ func (s *Service) SurfaceUIRuntimeSummary(surfaceID string) SurfaceUIRuntimeSumm
 	if runtime.ActiveWorkspacePage != nil {
 		summary.ActiveWorkspacePageID = strings.TrimSpace(runtime.ActiveWorkspacePage.CommandID)
 	}
+	summary.TaskBrowserCacheLoaded = runtime.TaskBrowserCache != nil
 	return summary
 }
 

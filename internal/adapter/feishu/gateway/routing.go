@@ -530,6 +530,57 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			TurnID:           turnID,
 			Inbound:          meta,
 		}, true
+	case cardActionKindTaskOpen,
+		cardActionKindTaskList,
+		cardActionKindTaskRefresh,
+		cardActionKindTaskPage,
+		cardActionKindTaskHome,
+		cardActionKindTaskReply:
+		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		if pickerID == "" {
+			return control.Action{}, false
+		}
+		actionKind := control.ActionTaskList
+		switch kind {
+		case cardActionKindTaskOpen:
+			actionKind = control.ActionTaskOpen
+		case cardActionKindTaskRefresh:
+			actionKind = control.ActionTaskRefresh
+		case cardActionKindTaskPage:
+			actionKind = control.ActionTaskPage
+		case cardActionKindTaskHome:
+			actionKind = control.ActionTaskHome
+		case cardActionKindTaskReply:
+			actionKind = control.ActionTaskReply
+		}
+		threadID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyThreadID))
+		if (actionKind == control.ActionTaskOpen || actionKind == control.ActionTaskReply || actionKind == control.ActionTaskPage) && threadID == "" {
+			return control.Action{}, false
+		}
+		text := ""
+		if actionKind == control.ActionTaskReply {
+			fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
+			if fieldName == "" {
+				fieldName = cardTaskReplyFieldName
+			}
+			text = commandFormArgumentValue(event.Event.Action, fieldName)
+			if text == "" {
+				return control.Action{}, false
+			}
+		}
+		return control.Action{
+			Kind:             actionKind,
+			GatewayID:        gatewayID,
+			SurfaceSessionID: surfaceSessionID,
+			ChatID:           chatID,
+			ActorUserID:      operatorID,
+			MessageID:        messageID,
+			PickerID:         pickerID,
+			ThreadID:         threadID,
+			Text:             text,
+			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			Inbound:          meta,
+		}, true
 	default:
 		return control.Action{}, false
 	}

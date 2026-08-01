@@ -37,6 +37,7 @@ const (
 	cardTargetPickerSessionFieldName          = frontstagecontract.CardTargetPickerSessionFieldName
 	cardSelectionThreadFieldName              = frontstagecontract.CardSelectionThreadFieldName
 	cardThreadHistoryTurnFieldName            = frontstagecontract.CardThreadHistoryTurnFieldName
+	cardTaskReplyFieldName                    = frontstagecontract.CardTaskReplyFieldName
 	cardActionPayloadDefaultCommandFieldName  = frontstagecontract.CardActionPayloadDefaultCommandFieldName
 	cardActionKindAttachInstance              = frontstagecontract.CardActionKindAttachInstance
 	cardActionKindAttachWorkspace             = frontstagecontract.CardActionKindAttachWorkspace
@@ -72,6 +73,12 @@ const (
 	cardActionKindTargetPickerConfirm         = frontstagecontract.CardActionKindTargetPickerConfirm
 	cardActionKindHistoryPage                 = frontstagecontract.CardActionKindHistoryPage
 	cardActionKindHistoryDetail               = frontstagecontract.CardActionKindHistoryDetail
+	cardActionKindTaskOpen                    = frontstagecontract.CardActionKindTaskOpen
+	cardActionKindTaskList                    = frontstagecontract.CardActionKindTaskList
+	cardActionKindTaskRefresh                 = frontstagecontract.CardActionKindTaskRefresh
+	cardActionKindTaskPage                    = frontstagecontract.CardActionKindTaskPage
+	cardActionKindTaskHome                    = frontstagecontract.CardActionKindTaskHome
+	cardActionKindTaskReply                   = frontstagecontract.CardActionKindTaskReply
 )
 
 var (
@@ -99,4 +106,6 @@ var (
 	actionPayloadTargetPickerCursor    = frontstagecontract.ActionPayloadTargetPickerCursor
 	actionPayloadTargetPickerValue     = frontstagecontract.ActionPayloadTargetPickerValue
 	actionPayloadThreadHistory         = frontstagecontract.ActionPayloadThreadHistory
+	actionPayloadTask                  = frontstagecontract.ActionPayloadTask
+	actionPayloadTaskReply             = frontstagecontract.ActionPayloadTaskReply
 )

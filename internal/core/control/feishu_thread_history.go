@@ -5,9 +5,37 @@ import "time"
 type FeishuThreadHistoryViewMode string
 
 const (
-	FeishuThreadHistoryViewList   FeishuThreadHistoryViewMode = "list"
-	FeishuThreadHistoryViewDetail FeishuThreadHistoryViewMode = "detail"
+	FeishuThreadHistoryViewList         FeishuThreadHistoryViewMode = "list"
+	FeishuThreadHistoryViewDetail       FeishuThreadHistoryViewMode = "detail"
+	FeishuThreadHistoryViewTasks        FeishuThreadHistoryViewMode = "tasks"
+	FeishuThreadHistoryViewConversation FeishuThreadHistoryViewMode = "conversation"
 )
+
+type FeishuTaskOption struct {
+	ThreadID string
+	Title    string
+	Status   string
+	AgeText  string
+	Disabled bool
+}
+
+type FeishuTaskWorkspaceGroup struct {
+	WorkspaceLabel string
+	Tasks          []FeishuTaskOption
+}
+
+type FeishuConversationMessage struct {
+	Role string
+	Text string
+}
+
+type FeishuConversationTurn struct {
+	TurnID      string
+	Status      string
+	UpdatedText string
+	ErrorText   string
+	Messages    []FeishuConversationMessage
+}
 
 type FeishuThreadHistoryTurnOption struct {
 	TurnID   string
@@ -29,8 +57,8 @@ type FeishuThreadHistoryTurnDetail struct {
 	UpdatedText string
 }
 
-// FeishuThreadHistoryView is the UI-owned read model for the /history list and
-// detail card flow.
+// FeishuThreadHistoryView is the UI-owned read model for /history and the
+// task-browser list/conversation card flows.
 type FeishuThreadHistoryView struct {
 	PickerID         string
 	MessageID        string
@@ -38,6 +66,8 @@ type FeishuThreadHistoryView struct {
 	Title            string
 	ThreadID         string
 	ThreadLabel      string
+	ThreadStatus     string
+	WorkspaceLabel   string
 	TurnCount        int
 	Page             int
 	TotalPages       int
@@ -47,6 +77,10 @@ type FeishuThreadHistoryView struct {
 	SelectedTurnID   string
 	TurnOptions      []FeishuThreadHistoryTurnOption
 	Detail           *FeishuThreadHistoryTurnDetail
+	TaskGroups       []FeishuTaskWorkspaceGroup
+	Conversation     []FeishuConversationTurn
+	CanReply         bool
+	PendingReply     string
 	Loading          bool
 	LoadingText      string
 	NoticeCode       string

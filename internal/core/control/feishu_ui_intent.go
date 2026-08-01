@@ -49,6 +49,13 @@ const (
 	FeishuUIIntentTargetPickerCancel          FeishuUIIntentKind = "target_picker_cancel"
 	FeishuUIIntentHistoryPage                 FeishuUIIntentKind = "history_page"
 	FeishuUIIntentHistoryDetail               FeishuUIIntentKind = "history_detail"
+	FeishuUIIntentShowTasks                   FeishuUIIntentKind = "show_tasks"
+	FeishuUIIntentTaskOpen                    FeishuUIIntentKind = "task_open"
+	FeishuUIIntentTaskList                    FeishuUIIntentKind = "task_list"
+	FeishuUIIntentTaskRefresh                 FeishuUIIntentKind = "task_refresh"
+	FeishuUIIntentTaskPage                    FeishuUIIntentKind = "task_page"
+	FeishuUIIntentTaskHome                    FeishuUIIntentKind = "task_home"
+	FeishuUIIntentTaskReply                   FeishuUIIntentKind = "task_reply"
 )
 
 // FeishuUIIntent classifies same-context Feishu navigation handled by the
@@ -67,6 +74,8 @@ type FeishuUIIntent struct {
 	TargetValue     string
 	ActorUserID     string
 	TurnID          string
+	ThreadID        string
+	Text            string
 	SourceMessageID string
 	Inline          bool
 	ParentCommand   string
@@ -123,6 +132,18 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 		return &FeishuUIIntent{Kind: FeishuUIIntentHistoryPage, PickerID: action.PickerID, Page: action.Page, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
 	case ActionHistoryDetail:
 		return &FeishuUIIntent{Kind: FeishuUIIntentHistoryDetail, PickerID: action.PickerID, TurnID: action.TurnID, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+	case ActionTaskOpen:
+		return &FeishuUIIntent{Kind: FeishuUIIntentTaskOpen, PickerID: action.PickerID, ThreadID: action.ThreadID, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+	case ActionTaskList:
+		return &FeishuUIIntent{Kind: FeishuUIIntentTaskList, PickerID: action.PickerID, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+	case ActionTaskRefresh:
+		return &FeishuUIIntent{Kind: FeishuUIIntentTaskRefresh, PickerID: action.PickerID, ThreadID: action.ThreadID, Page: action.Page, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+	case ActionTaskPage:
+		return &FeishuUIIntent{Kind: FeishuUIIntentTaskPage, PickerID: action.PickerID, ThreadID: action.ThreadID, Page: action.Page, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+	case ActionTaskHome:
+		return &FeishuUIIntent{Kind: FeishuUIIntentTaskHome, PickerID: action.PickerID, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
+	case ActionTaskReply:
+		return &FeishuUIIntent{Kind: FeishuUIIntentTaskReply, PickerID: action.PickerID, ThreadID: action.ThreadID, Text: action.Text, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
 	case ActionPlanProposalDecision,
 		ActionRespondRequest,
 		ActionControlRequest:

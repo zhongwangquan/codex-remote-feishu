@@ -153,7 +153,13 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 
 	bindings[FeishuCommandHelp] = terminalPageBinding(FeishuCommandHelp)
 	bindings[FeishuCommandStatus] = terminalPageBinding(FeishuCommandStatus)
-	bindings[FeishuCommandTasks] = terminalPageBinding(FeishuCommandTasks)
+	bindings[FeishuCommandTasks] = FeishuCommandBinding{
+		FamilyID:            FeishuCommandTasks,
+		Kind:                FeishuCommandBindingInlinePage,
+		LauncherDisposition: FeishuFrontstageLauncherEnterOwner,
+		FollowupPolicy:      mustFollowupPolicy(FeishuCommandTasks),
+		intentBuilder:       fixedInlineIntentBuilder(FeishuUIIntentShowTasks, nil),
+	}
 	bindings[FeishuCommandStop] = ownerEntryBindingWithPolicy(FeishuCommandStop)
 	bindings[FeishuCommandWorkspaceDetach] = ownerEntryBindingWithPolicy(FeishuCommandWorkspaceDetach)
 	bindings[FeishuCommandDetach] = ownerEntryBindingWithPolicy(FeishuCommandDetach)
@@ -166,6 +172,11 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 	bindings[FeishuCommandVSCodeMigrate] = daemonCommandBinding(FeishuCommandVSCodeMigrate, DaemonCommandVSCodeMigrateCommand, true)
 
 	return bindings
+}
+
+func mustFollowupPolicy(familyID string) FeishuFollowupPolicy {
+	policy, _ := followupPolicyForFamilyID(familyID)
+	return policy
 }
 
 func daemonCommandBinding(familyID string, daemonCommand DaemonCommandKind, propagateCardAction bool) FeishuCommandBinding {

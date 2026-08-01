@@ -53,7 +53,7 @@ func TestHandleGatewayActionReplacesMenuCardForListHandoffInNormalMode(t *testin
 	}
 }
 
-func TestHandleGatewayActionReplacesWorkspaceMenuCardForTasksTerminalHandoff(t *testing.T) {
+func TestHandleGatewayActionReplacesWorkspaceMenuCardForTasksOwnerHandoff(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
 		PID:       42,
@@ -93,20 +93,22 @@ func TestHandleGatewayActionReplacesWorkspaceMenuCardForTasksTerminalHandoff(t *
 			CardDaemonLifecycleID: app.daemonLifecycleID,
 		},
 	})
-	if tasksResult == nil || tasksResult.ReplaceCurrentCard == nil {
-		t.Fatalf("expected tasks terminal replacement result, got %#v", tasksResult)
+	if tasksResult != nil {
+		t.Fatalf("expected owner card to update the existing task message asynchronously, got %#v", tasksResult)
 	}
-	if len(gateway.operations) != 0 {
-		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	if len(gateway.operations) != 1 || gateway.operations[0].Kind != feishu.OperationUpdateCard || gateway.operations[0].MessageID != "om-workspace-menu-1" {
+		t.Fatalf("expected one in-place task owner card update, got %#v", gateway.operations)
 	}
-	if tasksResult.ReplaceCurrentCard.CardTitle != "工作任务" {
-		t.Fatalf("unexpected tasks replacement card title: %#v", tasksResult.ReplaceCurrentCard)
+	tasksCard := gateway.operations[0]
+	if tasksCard.CardTitle != "Codex 工作区" {
+		t.Fatalf("unexpected tasks replacement card title: %#v", tasksCard)
 	}
-	if len(operationCardButtons(*tasksResult.ReplaceCurrentCard)) != 0 {
-		t.Fatalf("expected sealed tasks result without active buttons, got %#v", tasksResult.ReplaceCurrentCard.CardElements)
+	if !operationHasActionValue(tasksCard, "task_refresh", "", "") ||
+		!operationHasActionValue(tasksCard, "task_home", "", "") {
+		t.Fatalf("expected active refresh and home navigation, got %#v", tasksCard.CardElements)
 	}
-	if summary := app.service.SurfaceUIRuntimeSummary("surface-1"); summary.ActiveWorkspacePageID != "" || summary.ActiveOwnerCardFlowID != "" {
-		t.Fatalf("expected tasks terminal handoff to clear workspace page runtime, got %#v", summary)
+	if summary := app.service.SurfaceUIRuntimeSummary("surface-1"); summary.ActiveWorkspacePageID != "" || summary.ActiveOwnerCardFlowID == "" || summary.ActiveOwnerCardFlowKind != "thread_history" || !summary.TaskBrowserCacheLoaded {
+		t.Fatalf("expected tasks owner handoff to keep task flow and cache, got %#v", summary)
 	}
 }
 

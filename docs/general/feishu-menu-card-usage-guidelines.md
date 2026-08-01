@@ -1,8 +1,8 @@
 # 飞书菜单卡使用规约
 
 > Type: `general`
-> Updated: `2026-07-28`
-> Summary: 固化菜单卡的 launcher/owner/terminal 契约、页面本地导航 callback substrate 与扩展清单；工作会话父页里的“工作任务”复用现有 `/tasks` terminal handoff，禁止回退到旧菜单基座或半菜单半业务混合实现。
+> Updated: `2026-08-01`
+> Summary: 固化菜单卡的 launcher/owner/terminal 契约、页面本地导航 callback substrate 与扩展清单；工作会话父页里的“工作任务”现在进入 `/tasks` owner 浏览器，并通过显式“返回首页”结束 owner、回到菜单，不回退旧菜单基座或半菜单半业务实现。
 
 ## 1. 文档定位
 
@@ -31,7 +31,7 @@
 
 - action 级入口契约由 `internal/core/control/feishu_ui_lifecycle.go` 统一定义
 - 菜单运行态由 `command_menu` owner flow 承载，禁止新增平行“菜单状态容器”
-- 菜单 flow role 只允许 `launcher -> owner` 单向切换，不允许回跳成 launcher
+- 菜单 flow role 默认只允许 `launcher -> owner` 单向切换；若某个纯导航 owner 明确提供 `返回首页`（当前只有 task browser），必须先结束旧 owner，再重建菜单 launcher，不得把 owner runtime 原地改回 launcher
 - 菜单层 `返回上一层` / `返回菜单` / 进入子页默认必须投影为 `page_local_action` 或 `page_local_submit`
 - `page_action` / `page_submit` 只保留给真正需要继续走命令 provenance 的动作，不再拿来表达纯前台导航
 
@@ -43,7 +43,7 @@
 
 - 菜单内可返回：仅限菜单层级（首页/分组/配置页）
 - 菜单层返回/回根/进入子页：默认是当前卡内的本地导航，不重放 slash command
-- 进入业务后不可返回菜单：业务未结束前，所有进度、成功、失败、取消都在业务 owner card 内收口
+- 执行业务进入 owner 后不可返回菜单：业务未结束前，所有进度、成功、失败、取消都在业务 owner card 内收口。纯浏览 owner 可提供显式 `返回首页`，但必须先终止当前 owner，再创建新的菜单 launcher；当前 `/tasks` 属于这类导航 owner
 - `help/status` 归类为 terminal：结果即完成，不再视为可继续返回的 preview
 
 ## 4. 单卡推进与换卡规则
@@ -86,9 +86,11 @@
 当前 `codex/claude headless` 的“工作区与会话”父页里，“工作任务”入口的固定合同是：
 
 - action：复用 `ActionTasks` / `/tasks`
-- contract：`enter_terminal`
-- handoff：首张 sealed 任务结果卡 `ReplaceCurrentCard`，同时结束并清掉当前 `workspace_page` owner runtime；不 append 第二张卡，也不建立新的 workspace/picker owner
-- 容量预算：父页固定为 6 个紧凑入口按钮，菜单来源时至多再带 1 个返回 footer；本次只增加 1 个固定组件，不引入动态增长，任务卡自身继续执行 50 条任务上限与 overflow 降级
+- contract：`enter_owner`
+- handoff：首张任务列表 `ReplaceCurrentCard`，同时结束 `workspace_page` owner，把同一 `message_id` 交给 task browser owner；不 append 第二张卡
+- owner 内导航：`task_open/list/refresh/page/reply` 都在同一卡片推进；列表和详情的 `task_home` 会结束 task owner，再同卡返回菜单首页
+- 缓存：返回任务列表只读 10 分钟 per-surface cache；仅显式刷新重建列表或重读对话
+- 容量预算：父页固定为 6 个紧凑入口按钮；任务列表最多 30 个任务、每 workspace 最多 8 个，详情每页 2 个 turn。最大列表与最大详情都必须通过 30 KB / 200 element 回归
 
 ## 7. 变更评审最小核对项
 
@@ -99,3 +101,4 @@
 - 是否仍不存在旧链路（submission anchor / bare continuation / MenuFlow substrate）
 - 是否新增了“菜单与业务混住”的路径
 - 是否覆盖菜单回退、业务收口、旧卡点击拒绝三类用例
+- 若 owner 提供返回首页，是否先结束 owner 再重建 launcher，且晚到异步结果不会把用户拉回旧 owner
