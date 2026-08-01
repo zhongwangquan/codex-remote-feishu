@@ -296,9 +296,6 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	if record := s.activeTargetPicker(surface); targetPickerPendingStillRunning(surface, record) {
 		cleanup.PreserveTargetPicker = true
 	}
-	if record := s.activeThreadHistory(surface); taskBrowserPendingStillRunning(surface, record) {
-		cleanup.PreserveThreadHistory = true
-	}
 	if headlessLaunchPurposeContinuesPromptDispatch(pending.Purpose) {
 		return s.attachHeadlessPromptDispatchRestart(surface, inst, pending)
 	}

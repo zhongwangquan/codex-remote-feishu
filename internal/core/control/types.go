@@ -92,12 +92,6 @@ const (
 	ActionTargetPickerConfirm         ActionKind = "surface.target_picker.confirm"
 	ActionHistoryPage                 ActionKind = "surface.history.page"
 	ActionHistoryDetail               ActionKind = "surface.history.detail"
-	ActionTaskOpen                    ActionKind = "surface.tasks.open"
-	ActionTaskList                    ActionKind = "surface.tasks.list"
-	ActionTaskRefresh                 ActionKind = "surface.tasks.refresh"
-	ActionTaskPage                    ActionKind = "surface.tasks.page"
-	ActionTaskHome                    ActionKind = "surface.tasks.home"
-	ActionTaskReply                   ActionKind = "surface.tasks.reply"
 	ActionFeishuAppTestCallback       ActionKind = "surface.button.feishu_app_test_callback"
 )
 

@@ -215,13 +215,7 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentTargetPickerOpenPathPicker,
 		FeishuUIIntentTargetPickerCancel,
 		FeishuUIIntentHistoryPage,
-		FeishuUIIntentHistoryDetail,
-		FeishuUIIntentTaskOpen,
-		FeishuUIIntentTaskList,
-		FeishuUIIntentTaskRefresh,
-		FeishuUIIntentTaskPage,
-		FeishuUIIntentTaskHome,
-		FeishuUIIntentTaskReply:
+		FeishuUIIntentHistoryDetail:
 		return true
 	default:
 		return false

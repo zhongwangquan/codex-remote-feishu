@@ -797,7 +797,6 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			if surface != nil {
 				events = append(events, s.finishSurfaceAfterWork(surface)...)
 			}
-			events = append(events, s.taskBrowserTurnCompletedEvents(instanceID, event.ThreadID)...)
 			return s.filterEventsForSurfaceVisibility(events)
 		}
 		outcome := s.deriveRemoteTurnOutcome(instanceID, event, finalText, summary)
@@ -819,7 +818,6 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			}
 		}
 		events = append(events, compactEvents...)
-		events = append(events, s.taskBrowserTurnCompletedEvents(instanceID, event.ThreadID)...)
 		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventItemStarted:
 		if s.maybeApplyReviewLifecycleItem(instanceID, event) {

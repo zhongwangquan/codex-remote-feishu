@@ -1,10 +1,9 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-01`
-> Summary: 当前 live remote surface 以 workspace/thread claim、queue/dispatch、request gate 与 owner overlay 为单一状态边界；`/tasks` 已升级为带 10 分钟缓存、真实 session 详情、显式返回和同 thread `resume_existing` Follow up 的任务浏览器，persisted Desktop/CLI thread 可经 managed headless 恢复后续聊，且恢复期间保留返回逃生口。
+> Updated: `2026-07-28`
+> Summary: 当前实现同步了 workspace-aware headless 主链与 vscode 主链，并把当前 live 的 backend-aware 可见命令面收口到新的投影；2026-07-28 补充：`codex/claude headless` 的 `/workspace` 父页新增 `工作任务`，直接复用现有 `/tasks` 只读 terminal 投影，不创建新的 route / queue / dispatch 状态；该投影现在还会合并本机 Codex Desktop、Codex CLI 与 Multica 中有未闭合且最近仍活跃的顶层任务，按 workspace 聚合并显示来源。2026-07-24 补充：Feishu 群聊 surface materialize/resume 时会维护一层 room context coordination record，V1 room id 使用 `feishu:chat:<chatID>`，record 保存 `chatID`、参与过的 gateway evidence、surface evidence、room workspace binding 与 reset generation；私聊 surface 不进入 room context。headless workspace claim owner 现在已经从单 `SurfaceSessionID` 扩展为 `surface` / `room` 结构化 owner：同一 room 下多个群 surface 可共享同一个 workspace claim，但 instance/thread claim 仍保持 surface 级独占，不共享会话；room 已绑定后切到其它 workspace 属于 destructive admin action，会在 route/launch 前做安全 blocker 与群管理员校验，成功后 reset 同 room 其它 surface 的 context-bound runtime。2026-07-22 补充：Feishu 群聊入站现在在 materialize surface / record message / queue dispatch 前必须确认消息 @ 当前 bot，未 @ 当前 bot、无 mention 或当前 bot identity 不可用时 fail closed 忽略，不进入 remote surface 状态机。`codex` 继续以 `workspace` 命令族作为主展示壳，`claude` 当前 live 实现也把 `switch_target` 收口到同一套 `/workspace` 父页与 `切换 / 工作任务 / 从目录新建 / 从 GIT URL 新建 / 从 Worktree 新建 / 解除接管` 六个入口，`current_work` 继续保留 `/new` 等当前工作动作，`常用工具` 继续收口到 `/history` 与 `/sendfile`；`/list`、`/use`、裸 `/detach` 则退回 hidden + allow 兼容 alias。`send_settings` 则改成 backend 互斥入口：`codex headless` 可见 `/codexprovider`，`claude headless` 可见 `/claudeprofile`，`vscode` 两者都隐藏，且手动输入错误 backend 的命令也会显式拒绝。`/model` 打开参数卡时会 best-effort 发送后台 `model.list` 能力刷新，但该命令不进入 queue/dispatch/pendingRemote，也不改变 route 状态；动态模型目录只作为 instance-scoped cache 服务 Feishu 菜单；Codex/VS Code `/reasoning` 的普通快捷项现在跟随当前模型的动态 `supportedReasoningEfforts`，未知模型或目录不可校验时不再展示全局硬编码档位。Codex prompt dispatch 现在只下发用户显式 reasoning override，空值表示自动；dispatch 前若目录可判定 `model + reasoning` 不兼容，会丢弃该 reasoning override 并发一次节流 runtime notice。thread lifecycle notification 现在是 state-only：`thread/closed` 只标记 notLoaded、不 detach；`thread/deleted` 会把命中 surface 清成 attached-unbound，防止继续路由到旧 thread。`/list` `/use` / target picker / workspace recency 全部只按当前 backend 过滤，且不再因为 surface/instance `ClaudeProfileID` 不同而隐藏 Claude workspace/session 候选；同时工作区一旦确定，`/workspace list` 与 alias `/list` 现在会把 `新建会话` 置顶并默认选中，`/use`、`/useall` 与锁定工作区的恢复 picker 则继续保留 `新建会话` fallback。2026-07-12 的补充是：`mcpServer/elicitation/request` 承载 MCP tool approval 时会按 `_meta.codex_approval_kind=mcp_tool_call` 进入 `mcp_server_elicitation_approval` 语义，仍复用 `G2 PendingRequest` gate 与 `request_respond` transport；飞书端只开放“允许本次 / 本会话允许”，本会话允许会回写 top-level `_meta.persist=session`，`persist=always` 仅提示暂不支持跨会话持久授权。同日补充：`mcpServer/oauth/login -> oauthLogin/completed` 已通过 help-visible、menu-hidden 的 `/mcpoauth <server>` 接入最小主动链路；它不进入 request gate，不做流式卡片，只向发起 surface append 授权链接与最终成功/失败 notice。2026-06-05 的补充是：headless auto-resume 的运行态只在真实恢复目标身份变化时重置 backoff / last notice，标题、更新时间等非目标元数据刷新不会把同一失败 episode 重新刷成新失败；auto-restore 启动的 managed headless 一旦连回，若 exact-thread 接管失败，也会立刻终止本轮 `PendingHeadless`、kill 这次拉起的 headless，并保留持久化恢复目标等待后续 backoff 重试。2026-05-31 的补充是：headless auto-resume 现在把“恢复 episode 的稳定失败根因”与“后续 retry 观测到的派生 busy/not_found 状态”分开记账；provider/profile/runtime 这类启动前失败会保留为本轮恢复的 canonical cause，并且只有在真正恢复成功或 target 改变后才会清空，因此后续 retry 不会再把用户提示改写成误导性的 workspace/thread busy，也不会对同一根因重复刷失败卡。2026-05-01 的新变化是：headless attach/reuse/restart/create/reject 已进一步收口成单一路径，visible 与 compatibility 继续拆层，但所有 consumer 现在都共享同一个 `desired surface contract vs observed instance contract` 解析核。结果是：
 >
-> 2026-08-01 补充：`/tasks` 已从 sealed 只读 terminal 投影升级为 `thread_history` owner-card 上的任务浏览器。首页缓存最近 24 小时任务 10 分钟，最多展示 30 个任务、每个工作区最多 8 个；任务可直接打开同一 thread 的真实对话，详情每页 2 个 turn，只展示 user/assistant session 内容。`返回任务列表` 命中缓存，不重新扫描 catalog 或读取历史；`刷新` / `刷新对话` 才强制重读；列表和详情都提供 `返回首页`。任务详情的 `Follow up` 通过现有 `resume_existing` prompt 主链继续同一 thread；在线 thread 直接复用，persisted Desktop/CLI thread 则先恢复为 managed headless，再读取历史并发送，因此后续内容仍写回同一 Codex session，并可在 PC 端查看。任务浏览不会新增 route mode，但打开任务时会显式保留 thread-history owner overlay；恢复期间也允许 `返回任务列表` / `返回首页`，避免 `PendingHeadless` 把用户困在 loading 卡。
 > 2026-07-28 模型所有权补充：Codex headless 在没有飞书显式 `/model` / `/reasoning` 覆盖时，不再由 remote 固定 `gpt-5.4` / `xhigh`，也不会把 thread observed model 复制成新一轮 override；新会话与后续 turn 都把 model / reasoning 留给 Codex app-server 自身配置和线程状态。`/model clear` 会回到这条跟随语义，参数卡明确显示“跟随 Codex 配置”。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
@@ -498,11 +497,6 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    3. pending headless reconnect 重新接回同一张 target picker owner card
    4. 这些路径若还需要继续走内部 route mutation（例如 Git clone / worktree create 成功后，继续 attach 新 workspace 并进入 `new_thread_ready`），也必须把同一份 `PreserveTargetPicker` 语义贯穿到后续 continuation；否则会被 `G5 TargetPickerProcessing` 误判成 competing route mutation，形成“业务流自己挡住自己”的死状态。
 8. detach-like cleanup 还会统一清掉 idle review session；只有 running review turn 会保留 review runtime 并改走前面的 `review_running` blocker。
-9. 任务浏览器复用 `thread_history` owner overlay，但打开某个任务属于同一 owner 内的 route transition：
-   1. `task_open` 调用既有 thread 选择/恢复路径时必须显式声明 `PreserveThreadHistory`。
-   2. 该标记必须贯穿 `prepareSurfaceForExecutionReattach(...)`、pending headless reconnect 与 recovery continuation；不得在 reattach 中途把任务 owner 清掉。
-   3. 用户在 persisted thread 恢复期间点 `task_list` / `task_home` 时，这两个动作是 `G1 PendingHeadlessStarting` 的显式逃生口：列表直接使用现有缓存，首页结束 owner；恢复可在后台完成，但不得再次把用户强制切回详情。
-   4. 任务列表缓存属于 per-surface 内存态 read cache，TTL 为 10 分钟；它不改变 route，不跨 daemon 恢复，也不成为 catalog 或 thread history 的新真相源。
 
 ### 3.5 草稿状态
 
@@ -606,7 +600,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    2. merged thread views / persisted recent threads 仍会把 recoverable-only workspace 补进候选。
    3. 仍会过滤 busy workspace，以及既不能 attach 也没有 recoverable thread 支撑的 workspace。
 2. bare `/workspace` / `/workspace new` 的直接动作，以及 `codex headless` 下从菜单首页点 `工作会话`，当前都会先产出 `UIEventFeishuPageView`。
-   1. bare `/workspace` 固定打开工作会话父页，展示 `切换`、`工作任务`、`从目录新建`、`从 GIT URL 新建`、`从 Worktree 新建`、`解除接管` 六个入口；其中 `工作任务` 会把 launcher 同卡交给 `/tasks` owner 浏览器，随后可进入任务详情、返回列表或首页，不直接改变 route。
+   1. bare `/workspace` 固定打开工作会话父页，展示 `切换`、`工作任务`、`从目录新建`、`从 GIT URL 新建`、`从 Worktree 新建`、`解除接管` 六个入口；其中 `工作任务` 只读取当前任务投影并以 sealed terminal page 同卡收口，同时清掉被替换的 `workspace_page` runtime，不改变 route。
    2. bare `/workspace new` 固定打开新建方式子页，展示 `从目录新建`、`从 GIT URL 新建` 与 `从 Worktree 新建` 三个入口。
 3. `/workspace list` 的直接动作，以及 headless 主链下的 `show_*` 同上下文导航，现在都会产出 `UIEventFeishuTargetPicker`。
    1. `/workspace list` 与 alias `/list` / `/use` / `/useall` / `show_workspace_threads` 都直接打开 `Page=target`。
@@ -775,7 +769,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 只要 `PendingHeadless != nil`：
 
-1. 允许：`/status`、`/autowhip`、`/autocontinue`、`/debug`、`/upgrade`、`/mode`、`/detach`、消息撤回、reaction；若当前 pending 是由任务浏览器打开 persisted thread 触发，还允许同一 owner 的 `task_list` 与 `task_home` 作为返回逃生口。
+1. 允许：`/status`、`/autowhip`、`/autocontinue`、`/debug`、`/upgrade`、`/mode`、`/detach`、消息撤回、reaction。
 2. 其余 surface action 全部在 `ApplySurfaceAction()` 顶层被拦截。
 
 这意味着：
@@ -1032,7 +1026,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    5. `系统管理`
 2. 二级分组顺序稳定，但组内可见命令会按当前 `product mode + menu stage` 做 display projection：
    1. `codex` 的菜单首页点击 `工作会话` 时，不再进入旧的命令分组页，而是直接打开 bare `/workspace` 父页。
-   2. bare `/workspace` 当前固定展示六个并列入口：`切换`、`工作任务`、`从目录新建`、`从 GIT URL 新建`、`从 Worktree 新建`、`解除接管`；`工作任务` 直接把当前 launcher card handoff 给 `/tasks` owner 浏览器，列表、详情、返回和续聊继续在同一张卡上推进。
+   2. bare `/workspace` 当前固定展示六个并列入口：`切换`、`工作任务`、`从目录新建`、`从 GIT URL 新建`、`从 Worktree 新建`、`解除接管`；`工作任务` 直接复用 `/tasks` 的 `enter_terminal` 投影，并在同卡收口后清掉父页 owner runtime。
    3. bare `/workspace new` 当前是单独的新建方式页，展示 `从目录新建`、`从 GIT URL 新建` 与 `从 Worktree 新建`。
    4. `codex` 下 `/list`、`/use`、`/useall`、`/detach` 不再作为主展示菜单项，但 alias / parser 兼容仍保留，并分别汇合到 `/workspace list` 与 `/workspace detach`。
    5. `claude` 下 `current_work` 分组当前直接显示 `/new`、`/status`，`switch_target` 分组直接显示 `/workspace new dir`、`/workspace detach`、`/list`、`/use`；裸 `/detach`、其余 `workspace*`、`/useall`、`/review` 与 `/bendtomywill` 不再出现在主展示菜单里。
@@ -1059,22 +1053,22 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    2. 同样的命令如果由 slash 文本或飞书后台 bot 菜单触发，仍按普通 append-only UIEvent 新发卡片
    3. `/help`、result/notice 类卡片不参与这条导航替换语义
 
-### 4.15.1 `/tasks` 是带缓存、详情与同 thread 续聊的任务浏览器
+### 4.15.1 `/tasks` 是按 workspace 聚合的多来源 thread-level 只读投影
 
-当前 `/tasks` 不创建新的 route mode；它以 `thread_history` owner-card flow 承载列表和详情，并在用户发送 Follow up 时复用既有 queue / dispatch 主链。
+当前 `/tasks` 不创建新的 queue / dispatch 状态，也不改变任何 surface route；它合并 relay surface 的 active/queued queue item 与本机 persisted Codex catalog 中仍有活动证据的顶层用户任务，并投影为当前正在执行或排队的工作任务列表。
 
 当前行为已经固定为：
 
-1. 任务候选来自当前 backend 的 merged thread view，并叠加 relay queue/running 事实；只展示最近 24 小时内有时间证据的 thread，active/queued thread 不受时间窗口误删。
-2. 同一 thread 只展示一次；运行中、排队中状态优先于静态状态，标题使用 Codex thread title，不用“继续”“当前状态”这类最近输入覆盖已有任务标题。
-3. 列表按 workspace 分组，最多展示 30 个任务、每个 workspace 最多 8 个；每个任务直接以标题按钮进入详情，并显示状态与最近时间。
-4. per-surface 任务 cache 的 TTL 为 10 分钟。`task_list` 返回列表只读取 cache；`task_refresh` 在列表强制重建任务候选，在详情强制重读 thread history；daemon 重启后 cache 丢失是当前接受语义。
-5. 列表和详情都提供 `task_home` 返回菜单首页；详情额外提供 `task_list` 返回任务列表。所有子页都有显式出口，不依赖浏览器式隐式后退。
-6. `task_open` 先复用 `useThreadWithOverlayCleanup(... PreserveThreadHistory=true)`：在线 thread 直接接管，persisted Desktop/CLI thread 则按现有 resolver 恢复 managed headless；恢复成功后发送 `thread.history.read(includeTurns=true)`。
-7. 详情只展示真实 session 中的 user/assistant 消息，省略 tool、reasoning、diff、plan 与内部协议 item；每页 2 个 turn，每个 turn 最多 4 条消息，每条最多 800 rune，并提供更早/较新对话分页。
-8. `task_reply` 表单字段固定为 `task_reply`。提交后进入既有文本 ingress，冻结目标为当前详情 thread，`PromptExecutionMode=resume_existing`；这不是新聊天，也不会复制 session。发送中的文本先以 optimistic `PendingReply` 显示，turn terminal 后重新读取该 thread history。
-9. persisted Desktop/CLI thread 的续聊会写回同一 Codex session，因此 PC 端可以查看后续内容；但若该 thread 已由其它 surface 或不兼容实例占用，仍遵守现有 workspace/thread claim 与 resolver 拒绝语义，不绕过单写者边界。
-10. workspace、标题、状态、时间、用户/assistant 正文和错误文本都是动态内容，只进入 `plain_text`；固定 label 与固定导航文案才允许由 adapter 生成 markdown。最大列表与最大对话投影都必须同时通过 30 KB / 200 element 回归预算。
+1. 飞书任务身份优先使用 queue item 冻结执行计划里的 `ExecutionThreadID`，并从 attached instance 的 `ThreadRecord` 读取 Codex 会话标题。
+2. 若对应 thread 暂时不可解析或仍未命名，才回退到 source / reply message preview 或自动任务类型标签；因此“当前状态”“继续”这类本轮输入不再覆盖已经存在的 Codex 任务标题。
+3. 本机 persisted 任务只纳入 `source=cli|vscode`、`agent_role` 为空且属于顶层用户线程的记录；结构化 `thread_source` 非 `user` 的记录，以及旧数据库中标题或首条用户消息以 `Automation:` 开头的 automation 记录均排除。
+4. rollout 最新相关生命周期必须是 `task_started`，并且文件在最近 10 分钟仍有写入；`task_complete`、`turn_aborted`、活动窗口外的未闭合残影和 subagent 都不展示。即使线程仍未归档或最近更新，只要最新生命周期已经结束，也不会以“可继续”混入正在进行列表。
+5. persisted 来源按 rollout `session_meta.originator` 映射为 `Codex Desktop`、`Codex CLI` 或 `Multica`；`Codex Remote Headless` 明确排除，因为它已经由 relay surface 的 authoritative queue/runtime 路径拥有。
+6. 同一 `workspace + execution thread` 只展示一个任务；同一 thread 同时存在 active 与 queued item 时 active 优先，同一 thread 同时命中 persisted 与飞书 runtime 时飞书优先，避免重复。
+7. 结果先按 workspace 分组，同一 workspace 下允许并列多个正在执行或排队中的任务，并逐条显示来源与状态。
+8. 投影最多展开 50 个去重后的任务；workspace 与任务标题都限制为 40 个 rune，超出任务只展示剩余数量。最坏 50 个 workspace 时约产生 100 个正文元素，低于当前 Feishu 卡片 200 element / 30 KB 基线。
+9. workspace、任务标题、来源与状态属于动态文本，只进入 `FeishuCardTextSection.Lines` 并由 adapter 渲染为 `plain_text`；section label 只使用固定系统文案，动态值不得进入 raw markdown。
+10. 这条 persisted catalog 是只读发现，不表示 relay 已经接管 Codex Desktop 正在使用的 app-server；因此 `/tasks` 当前不能据此直接 steer/interrupt Desktop turn。
 
 ### 4.16 autowhip 调度只允许走显式 reply-anchor，不再伪造用户消息 pending/typing
 
@@ -1686,7 +1680,7 @@ transport degraded retained attachment
 | 请求按钮 | 拒绝 | 拒绝 | 允许 | 拒绝 | 允许 | 理论上通常不会出现；若出现仍按 attached surface 处理 |
 | `/stop` | 通常无效果 | 通常无效果 | 允许 | 允许 | 允许 | 允许；可清掉 staged/queued draft |
 | `/status` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
-| `/tasks` | 允许；打开最近 24 小时任务浏览器，可进入详情并按 resolver 恢复/续聊同一 thread | 允许；同左 | 允许；同左 | 允许；同左 | 允许；同左 | 允许；同左 |
+| `/tasks` | 允许；只读汇总飞书 active/queued 与本机 Codex Desktop/CLI/Multica 中仍有未闭合生命周期和最近活动证据的顶层用户 thread | 允许；同左 | 允许；同左 | 允许；同左 | 允许；同左 | 允许；同左 |
 | `/detach` | 允许但通常只提示已 detached；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias | 允许；dispatching/running 时走 abandoning；`codex` 与 `claude` 的菜单主展示命令都已切到 `/workspace detach`，裸 `/detach` 只保留兼容 alias |
 | bare `/mode` / bare `/autowhip` / bare `/autocontinue` | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
 | bare `/model` `/reasoning` `/access` | 允许，但 detached 时只回恢复/参数卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 | 允许，返回快捷按钮 + 表单卡 |
@@ -1697,7 +1691,7 @@ transport degraded retained attachment
 
 | 覆盖状态 | 当前行为 |
 | --- | --- |
-| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autowhip`、`/autocontinue`、`/debug`、`/upgrade`、`/mode`、`/detach`、revoke/reaction；若 pending 来自任务详情打开 persisted thread，还允许当前任务 owner 的 `task_list` / `task_home` 返回逃生口。其中 `/mode` 若实际切到了新的 backend 或 `ProductMode`，会直接 kill 当前恢复流程并清空持久化 headless / resume target；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效。若当前 pending 只是后台 auto-restore 占位，手动 `/upgrade latest` 与允许 dev feed 的 flavor（源码 `dev` 与 release `alpha`）下的 `/upgrade dev` 允许继续弹候选升级卡 |
+| `G1 PendingHeadlessStarting` | 只允许 `/status`、`/autowhip`、`/autocontinue`、`/debug`、`/upgrade`、`/mode`、`/detach`、revoke/reaction；其中 `/mode` 若实际切到了新的 backend 或 `ProductMode`，会直接 kill 当前恢复流程并清空持久化 headless / resume target；reaction 即使放行到 action 层，也只会在满足 steering 条件时生效。若当前 pending 只是后台 auto-restore 占位，手动 `/upgrade latest` 与允许 dev feed 的 flavor（源码 `dev` 与 release `alpha`）下的 `/upgrade dev` 允许继续弹候选升级卡 |
 | `G2 PendingRequest` | 普通文本、图片、文件、`/new`、`/compact` 被挡；`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被冻结；`/mode` 允许，并会把 request gate 一并清掉；用户也可以先处理请求卡片。request family 当前仍共用同一 gate / revision / waiting-dispatch substrate，但前台激活语义已进一步收口成“同一 surface 只激活队头 request”：若同一 turn 连续到达多条 renderable request，orchestrator 会按到达顺序排队，只展示第一条；后续 request 要等前一条真正 `request.resolved` 或整轮 turn 结束后才会依次激活，避免多张可点击 request card 并列出现。队头 request 当前还显式区分 `pending_visibility` / `visible` / `delivery_degraded` 三种前台可见性：`pending_visibility` 表示 request 已进入 gate，但系统还在尝试把确认卡显示到 owner surface；`visible` 表示当前 request card 已真正送达，可继续沿同一张 owner card 刷新；`delivery_degraded` 表示最近一次投递失败，普通输入仍被 gate 挡住，但 `/status` 与后续前台交互会优先触发 redelivery。与此同时，队头 request 的 lifecycle 也继续投影到 blocker / `/status`：`submitting` 会明确显示“正在提交，等待本地后端接收”，`awaiting_backend_consume` 会明确显示“已提交，等待后端继续处理”；若同时存在 `pending_visibility` / `delivery_degraded`，`/status` 会把“已提交”与“卡片仍在显示中/送达失败”一起说明，不再把这些状态压成同一句泛化 `pending_request`。卡面语义继续由 orchestrator 单点归一化成 `SemanticKind`：approval family 会区分 `approval_command`、`approval_file_change`、`approval_network`、`approval_can_use_tool`、`plan_confirmation`；其中 `approval_can_use_tool` 当前默认显式暴露 `accept` / `decline` / `captureFeedback`，若 request metadata 里保留了非空 `permissionSuggestions`，还会额外暴露 `acceptForSession`：`acceptForSession` 会直接派发 same-request allow，Claude translator 会把观测到的 `permissionSuggestions` 原样回写成 native `updatedPermissions[]`；若 suggestions 缺失，前台不会暴露这条入口，误收到时 translator 也会 fail-closed。`captureFeedback` 不会再拆成 follow-up prompt，而是进入 `G3 RequestCapture`，把下一条文本回写成同一次 request 的 `{decision=decline, message=<feedback>}`，且不触发 interrupt。`plan_confirmation` 当前显式暴露 accept / acceptForSession / decline / revise：`acceptForSession` 不再直接代表“立刻持续授权”，而是把同一条 pending request inline 切到 request-local structured permission panel；panel submit 仍留在 `G2 PendingRequest`，先把当前卡 seal 成摘要态，再派发 `{decision=accept, permissionSelection={scope=session, grant_level, directories[], rule_classes[]}}`；`decline` 仍是 hard stop，`revise` 会进入 `G3 RequestCapture`，把下一条文本作为 same-request guidance 回写给 Claude，而不是复用 generic `captureFeedback` 的“拒绝 + follow-up 入队”语义。其余 approval 语义继续按 `availableDecisions` 生成 `accept`、`acceptForSession`、`decline`、`cancel` 等决策；`request_user_input` 继续支持“单题自动推进”；`permissions_request_approval` 会投影成权限授予卡，支持“允许本次 / 本会话允许 / 拒绝”；`mcp_server_elicitation` 会分成 url / form / approval 三种语义，其中 form 型同样是单题自动推进，optional 字段需要显式 `skip_optional`，底部 `cancel_request` 只取消当前 request、不打断 turn；approval 型仍回写 MCP elicitation `{action, content, _meta}`，默认“允许本次”会删除 request `_meta.persist` 广告后发送 `action=accept`，若上游 `_meta.persist` 广告 `session` 才显示“本会话允许”并回写 `_meta.persist=session`，若广告 `always` 只提示当前飞书端暂不支持持久授权，不开放 `_meta.persist=always` 提交入口；Claude delegated task 场景下，request card 还会追加 `来自 Task (...)` 这类来源标签，避免把 Task 内的 pending request 误解成“Task 卡死”。这些卡都会在 `request_revision` 上做 same-daemon freshness 校验。`tool_callback` 当前则进入只读 fail-closed 分支：若前面没有别的 pending request，它会 append 一张 sealed `tool_callback` 提示卡并立即自动派发结构化 unsupported 结果；若前面已有队头 request，则会先排队，等轮到自己成为队头时再走同样的 auto-dispatch。无论哪种路径，在上游 `request.resolved` 之前，这个 pending request 仍会保持 gate，避免 route/输入穿透。若这条自动回写被本地 Codex 拒绝，卡片不会错误退回可编辑态，而是继续保持 sealed，并明确提示用户可用 `/stop` 结束当前 turn |
 | `G3 RequestCapture` | 下一条文本优先被当成反馈；图片、文件、`/new`、`/compact`、`/use`、`/follow`、follow 自动重绑定只要会改路由也都会被 request-capture gate 冻住；`/mode` 允许，并会把 capture gate 一并清掉。当前 capture family 继续至少分成三类：generic approval 的 `captureFeedback` 会把当前 request 先拒绝，再把下一条文本排成普通 follow-up queue item；`approval_can_use_tool` 的 `captureFeedback` 不会生成 follow-up queue item，而是把下一条文本直接回写成当前 request 的 same-request deny-with-message；`plan_confirmation` 的 `revise` 则不会生成 follow-up queue item，而是把下一条文本直接回写成当前 request 的 same-request deny-with-guidance |
 | `G4 PathPicker` | 只允许当前 active picker 自己的 enter/up/select/confirm/cancel callback、`/status`、普通文本/图片/文件、revoke/reaction；`/workspace` 命令族、`/list`、`/use`、`/useall`、`/follow`、`/new`、`/detach`，以及 `/menu` / bare config / 其它 competing Feishu card flow 当前都会被挡住并提示先确认或取消 picker。confirm / cancel 会先清 gate，再把结果交给 consumer 或默认 notice；unauthorized 只回拒绝 notice，不清当前 gate；若 picker 已过期，则会在下一次 action 入口自动清 gate |
@@ -1738,12 +1732,6 @@ retained-offline overlay 额外规则：
 | `show_recent_thread_workspaces` | `ActionShowRecentThreadWorkspaces` | headless 主链下重新打开 `/workspace list` 切换卡（兼容旧 grouped 总览返回动作） |
 | `history_page` | `ActionHistoryPage` | `/history` 列表页翻页；会先同步把当前卡切到 loading，再异步重查当前 thread history |
 | `history_detail` | `ActionHistoryDetail` | `/history` 进入某一轮详情，或在详情页前后切换；同样会先同步 loading，再异步回填结果 |
-| `task_open` | `ActionTaskOpen` | 从任务列表进入指定 thread 详情；保留当前 task owner，必要时先恢复 persisted thread，再读取真实 session history |
-| `task_list` | `ActionTaskList` | 从详情返回缓存列表；不重新扫描任务或读取 history |
-| `task_refresh` | `ActionTaskRefresh` | 列表强制重建任务 cache；详情强制重读当前 thread history |
-| `task_page` | `ActionTaskPage` | 在当前任务详情内切换更早/较新的对话页 |
-| `task_home` | `ActionTaskHome` | 从任务列表或详情返回菜单首页并结束 task owner；也是 pending headless 恢复期间的逃生口 |
-| `task_reply` | `ActionTaskReply` | 从 `task_reply` 表单提取 Follow up，按 `resume_existing` 继续当前详情 thread |
 | `target_picker_select_workspace` | `ActionTargetPickerSelectWorkspace` | `/workspace list` 切换卡与 `/workspace new worktree` 基准工作区下拉回调；只刷新当前卡，不直接改 route |
 | `target_picker_select_session` | `ActionTargetPickerSelectSession` | `/workspace list` 切换卡的会话下拉回调；只刷新当前卡，不直接改 route |
 | `target_picker_open_path_picker` | `ActionTargetPickerOpenPathPicker` | `/workspace new dir` / `/workspace new git` 的子步骤导航回调；会打开目录 path picker，并把 Git 主卡草稿一起保存在 active target picker runtime 里；path picker confirm/cancel 回调会先异步 ack，再把最新主卡 patch 回原 target picker owner card |
@@ -1814,8 +1802,7 @@ retained-offline overlay 额外规则：
    10. `ActionShowHistory`
    11. `ActionHistoryPage`
    12. `ActionHistoryDetail`
-   13. `ActionTaskOpen` / `ActionTaskList` / `ActionTaskRefresh` / `ActionTaskPage` / `ActionTaskHome` / `ActionTaskReply`
-   14. bare `ActionModeCommand` / `ActionAutoWhipCommand` / `ActionReasoningCommand` / `ActionAccessCommand` / `ActionModelCommand`
+   13. bare `ActionModeCommand` / `ActionAutoWhipCommand` / `ActionReasoningCommand` / `ActionAccessCommand` / `ActionModelCommand`
 2. 这些动作只要命中 `ResolveFeishuFrontstageActionContract(action).CurrentCardMode=inline_view`、来源卡片带有当前 daemon 的 lifecycle 标识、且首个 `UIEvent` 显式标记 `InlineReplaceCurrentCard`，就会先走原地替换；若同一动作后面还带异步命令（当前就是 `/history` 的 `thread.history.read`），daemon 仍会继续执行后续事件，不会因为同步 replace 而提前终止。
 3. `/help` 这类静态目录卡、apply 终态、request prompt 终态，以及 bare `/upgrade` / `/debug` 的状态卡与 upgrade 重启后结果 notice 等仍然沿用 append-only 消息语义，不在这轮同步回包范围内；当前例外是 `/upgrade latest` 一旦进入 daemon owner-card 流，会在同一张升级卡上继续 patch 到 confirm/running/restarting。
 
@@ -1864,7 +1851,6 @@ retained-offline overlay 额外规则：
 39. **route / attach 上下文已经变化，但旧 workspace page / target picker / path picker / history / review picker 还要等“再点一次旧卡”才暴露失效，甚至出现第一次返回无效的假活状态**：已修复。当前 detach-like / route-change cleanup 会统一清掉 context-bound overlay runtime；只要仍有稳定 owner message，就会主动把旧卡封成失效态。若当前可见的是 target-picker-owned path picker 子步骤，则只 patch 这张可见子卡，隐藏父卡 runtime 静默清理；没有 anchor 的旧卡则继续按 callback fail-closed。
 40. **headless auto-resume 先因为 provider/profile/runtime 失败，再在后续 retry 上被 `workspace_busy` / `thread_busy` 覆盖成误导性根因，或每次 retry 都重复刷同一条失败卡**：已修复。当前恢复 runtime 会把“最新 retry 结果”和“本轮恢复的稳定失败根因”拆开记录；启动前失败会在真正恢复成功前一直保留为 canonical cause，后续派生 busy/not_found 只影响 backoff，不再改写用户提示；同一根因在同一恢复 episode 里也不会重复刷卡。
 41. **auto-restore 启动的 managed headless 已经连回，但 exact-thread 接管失败后，surface 仍保留 `PendingHeadless` 到启动超时，并且同一持久化目标的非目标元数据刷新会重置 daemon 侧失败节流，导致恢复失败提示反复刷屏**：已修复。当前连接后接管失败会立刻清掉本轮 pending、kill 这次拉起的 headless，并把缺 workspace/cwd 等接管失败归一到 `headless_restore_*` 恢复失败族；daemon 同步恢复运行态时只用真实恢复目标身份判断是否重置 backoff，标题/时间等元数据刷新不会让同一 episode 重新投影。
-42. **任务详情打开 persisted thread 时 cleanup 提前清掉 owner，或 `PendingHeadless` 把返回按钮一起挡住，导致用户卡在 loading 页**：已修复。`PreserveThreadHistory` 现在贯穿 execution reattach/recovery continuation，`task_list` / `task_home` 在该恢复窗口内显式放行；用户返回列表后，连接完成也不会强制重新打开详情。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 
@@ -1904,8 +1890,8 @@ retained-offline overlay 额外规则：
 11. Codex dispatch guard 是否只丢弃“目录已知且明确不兼容”的 reasoning override，并且不误伤 unknown/manual model、Claude launch contract 或 model/access override。
 12. Feishu room workspace 切换是否仍只在真正 destructive workspace change 前触发，且当前 surface blocker、同 room unsafe blocker、管理员校验、sibling reset、最终 binding 写入保持同一顺序；普通同 workspace `/use` / session 选择不能调用管理员 API。
 13. prompt-dispatch watchdog 是否仍从真实 `prompt.send` command bind 开始计时、在 `turn.started` 后立即失效、对同一 queue item 只切一次，并在兜底 turn terminal 后回到标准 managed headless；Feishu notice 失败不能阻塞 daemon kill/start。
-14. `/tasks` 是否仍保持 `threadID` 任务身份与 24 小时窗口、10 分钟 cache、30 个总任务/每工作区 8 个上限；返回列表是否只读 cache、刷新是否显式重读；详情是否只展示 user/assistant session 内容并按 2 turn/页降级；Follow up 是否始终冻结为当前 thread 的 `resume_existing`，同时保持动态文本 `plain_text`、30 KB / 200 element 与 pending-headless 返回逃生口。
+14. `/tasks` 是否仍以 `workspace + execution thread` 作为任务身份、飞书 runtime 优先于同 thread persisted 记录、active 优先于 queued item；本机 Desktop/CLI/Multica 是否都只认未闭合生命周期 + 10 分钟活动证据，并排除 completed/aborted、automation、subagent 与 Remote Headless；同时是否保持只读边界、50 任务容量降级与动态文本 `plain_text` 边界。
 
 ## 11. 待讨论取舍
 
-1. `/tasks` 当前可以恢复 persisted Desktop/CLI thread 并以 managed headless 继续同一 session，因此 PC 端可看到后续内容；但它仍不能控制 Desktop 客户端当下正在执行的未落盘 turn。若未来要对同一 live Desktop turn 做实时 steer/interrupt/approval，需要接入 Desktop 正在使用的 authoritative app-server，并定义跨客户端单写者 lease、接管提示与冲突恢复。
+1. `/tasks` 当前只读发现 Codex Desktop 任务；若要允许飞书查看实时 item 进度并继续、打断或审批 Desktop 的当前 turn，必须接入 Desktop 正在使用的 authoritative app-server（或引入单一共享 owner/本地 bridge），并定义单写者 lease、接管提示与冲突恢复。安全默认是在该 ownership contract 落地前不从 persisted catalog 发起任何写操作。

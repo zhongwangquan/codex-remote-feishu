@@ -471,8 +471,7 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice:           notice,
 		}}
-		events = s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
-		return s.maybeFinalizePendingTaskBrowser(surface, events, notice.Text)
+		return s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
 	}
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
 		notice := NoticeForProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
@@ -491,8 +490,7 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice:           &notice,
 		}}
-		events = s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
-		return s.maybeFinalizePendingTaskBrowser(surface, events, notice.Text)
+		return s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
 	}
 	problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 		Code:             "headless_start_failed",
@@ -512,8 +510,7 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Notice:           &notice,
 	}}
-	events = s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
-	return s.maybeFinalizePendingTaskBrowser(surface, events, notice.Text)
+	return s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
 }
 
 func (s *Service) ApplyInstanceConnected(instanceID string) []eventcontract.Event {
@@ -531,9 +528,7 @@ func (s *Service) ApplyInstanceConnected(instanceID string) []eventcontract.Even
 			continue
 		}
 		attachEvents := s.attachHeadlessInstance(surface, inst, pending)
-		attachEvents = s.maybeFinalizePendingTargetPicker(surface, attachEvents, "")
-		attachEvents = s.maybeFinalizePendingTaskBrowser(surface, attachEvents, "")
-		events = append(events, attachEvents...)
+		events = append(events, s.maybeFinalizePendingTargetPicker(surface, attachEvents, "")...)
 	}
 	for _, surface := range s.findAttachedSurfaces(instanceID) {
 		events = append(events, s.dispatchNext(surface)...)
@@ -556,9 +551,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 		if s.consumeSurfacePendingHeadlessLaunch(surface, instanceID) == nil {
 			continue
 		}
-		failureText := "当前工作目标准备已中断，请重新发送 /list、/use 或 /useall 再试一次。"
-		pendingEvents := s.maybeFinalizePendingTargetPicker(surface, nil, failureText)
-		events = append(events, s.maybeFinalizePendingTaskBrowser(surface, pendingEvents, failureText)...)
+		events = append(events, s.maybeFinalizePendingTargetPicker(surface, nil, "当前工作目标准备已中断，请重新发送 /list、/use 或 /useall 再试一次。")...)
 	}
 
 	surfaces := s.findAttachedSurfaces(instanceID)

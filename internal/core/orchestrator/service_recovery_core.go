@@ -40,7 +40,6 @@ func (s *Service) prepareSurfaceForExecutionReattachWithOverlayCleanup(surface *
 	} else {
 		events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", surfaceOverlayRouteCleanupOptions{
 			PreserveTargetPicker:  cleanup.PreserveTargetPicker,
-			PreserveThreadHistory: cleanup.PreserveThreadHistory,
 			ForceClearReviewState: true,
 		})...)
 		clearAutoContinueRuntime(surface)

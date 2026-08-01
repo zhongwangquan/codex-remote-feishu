@@ -40,7 +40,6 @@ const (
 	CardTargetPickerSessionFieldName          = "target_picker_session"
 	CardSelectionThreadFieldName              = "selection_thread"
 	CardThreadHistoryTurnFieldName            = "thread_history_turn"
-	CardTaskReplyFieldName                    = "task_reply"
 	CardActionPayloadDefaultCommandFieldName  = "command_args"
 	CardActionKindAttachInstance              = "attach_instance"
 	CardActionKindAttachWorkspace             = "attach_workspace"
@@ -80,12 +79,6 @@ const (
 	CardActionKindTargetPickerConfirm         = "target_picker_confirm"
 	CardActionKindHistoryPage                 = "history_page"
 	CardActionKindHistoryDetail               = "history_detail"
-	CardActionKindTaskOpen                    = "task_open"
-	CardActionKindTaskList                    = "task_list"
-	CardActionKindTaskRefresh                 = "task_refresh"
-	CardActionKindTaskPage                    = "task_page"
-	CardActionKindTaskHome                    = "task_home"
-	CardActionKindTaskReply                   = "task_reply"
 )
 
 func ActionPayloadKind(value map[string]any) string {
@@ -382,26 +375,6 @@ func ActionPayloadThreadHistory(kind, pickerID, turnID string, page int) map[str
 	if strings.TrimSpace(turnID) != "" {
 		payload[CardActionPayloadKeyTurnID] = strings.TrimSpace(turnID)
 	}
-	return payload
-}
-
-func ActionPayloadTask(kind, pickerID, threadID string, page int) map[string]any {
-	payload := map[string]any{
-		CardActionPayloadKeyKind:     strings.TrimSpace(kind),
-		CardActionPayloadKeyPickerID: strings.TrimSpace(pickerID),
-	}
-	if strings.TrimSpace(threadID) != "" {
-		payload[CardActionPayloadKeyThreadID] = strings.TrimSpace(threadID)
-	}
-	if page > 0 {
-		payload[CardActionPayloadKeyPage] = page
-	}
-	return payload
-}
-
-func ActionPayloadTaskReply(pickerID, threadID string) map[string]any {
-	payload := ActionPayloadTask(CardActionKindTaskReply, pickerID, threadID, 0)
-	payload[CardActionPayloadKeyFieldName] = CardTaskReplyFieldName
 	return payload
 }
 
